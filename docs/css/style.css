@@ -315,12 +315,30 @@ input[type="checkbox"] {
 
 .sensor-list li.available {
   font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: all 0.15s;
+}
+
+.sensor-list li.available.selected {
   border-color: var(--success);
   color: var(--success);
+  background: rgba(68, 204, 102, 0.1);
+}
+
+.sensor-list li.available.deselected {
+  border-color: var(--border);
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.sensor-list li.available:active {
+  transform: scale(0.95);
 }
 
 .sensor-list li.unavailable {
-  opacity: 0.35;
+  opacity: 0.25;
   font-weight: 400;
 }
 

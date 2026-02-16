@@ -13,6 +13,13 @@
   const $ = (id) => document.getElementById(id);
   const els = {};
 
+  // Sensor definitions for UI
+  const sensorDefs = [
+    { key: 'motion', name: 'Motion (Accel + Gyro)', icon: '&#x1F4F1;' },
+    { key: 'orientation', name: 'Orientation', icon: '&#x1F9ED;' },
+    { key: 'geolocation', name: 'Geolocation (GPS)', icon: '&#x1F4CD;' },
+  ];
+
   function cacheDom() {
     els.modal = $('connection-modal');
     els.mainUI = $('main-ui');
@@ -38,6 +45,7 @@
     els.touchPad = $('touch-pad');
     els.touchCanvas = $('touch-canvas');
     els.btnExitTouch = $('btn-exit-touch');
+    els.debugInfo = $('debug-info');
   }
 
   function loadSettings() {
@@ -51,6 +59,12 @@
           sampleRate = s.sampleRate;
           els.sampleRateValue.textContent = s.sampleRate;
         }
+        // Restore sensor selection
+        if (s.sensorSelection) {
+          for (const [key, val] of Object.entries(s.sensorSelection)) {
+            SensorModule.setSensorSelected(key, val);
+          }
+        }
       } catch (e) { /* ignore */ }
     }
   }
@@ -59,6 +73,7 @@
     localStorage.setItem('wob-settings', JSON.stringify({
       tdAddress: els.tdAddress.value,
       sampleRate: sampleRate,
+      sensorSelection: SensorModule.getSelected(),
     }));
   }
 
@@ -66,7 +81,7 @@
     cacheDom();
     loadSettings();
     bindEvents();
-    detectSensors();
+    renderSensorList();
   }
 
   function bindEvents() {
@@ -101,22 +116,39 @@
     setInterval(updatePacketRate, 1000);
   }
 
-  function detectSensors() {
+  /**
+   * Render sensor list with toggle functionality
+   */
+  function renderSensorList() {
     const avail = SensorModule.detect();
-    const sensorDefs = [
-      { key: 'motion', name: 'Motion (Accel + Gyro)', icon: '&#x1F4F1;' },
-      { key: 'orientation', name: 'Orientation', icon: '&#x1F9ED;' },
-      { key: 'geolocation', name: 'Geolocation (GPS)', icon: '&#x1F4CD;' },
-      { key: 'microphone', name: 'Microphone', icon: '&#x1F3A4;' },
-      { key: 'ambientLight', name: 'Ambient Light', icon: '&#x1F4A1;' },
-      { key: 'proximity', name: 'Proximity', icon: '&#x1F44B;' },
-    ];
+    const selected = SensorModule.getSelected();
 
     els.sensorList.innerHTML = '';
     sensorDefs.forEach((s) => {
       const li = document.createElement('li');
-      li.className = avail[s.key] ? 'available' : 'unavailable';
+      const isAvailable = avail[s.key];
+      const isSelected = selected[s.key];
+
+      if (!isAvailable) {
+        li.className = 'unavailable';
+      } else if (isSelected) {
+        li.className = 'available selected';
+      } else {
+        li.className = 'available deselected';
+      }
+
       li.innerHTML = `<span class="sensor-icon">${s.icon}</span> ${s.name}`;
+
+      // Add click handler for available sensors
+      if (isAvailable) {
+        li.addEventListener('click', () => {
+          SensorModule.toggleSensor(s.key);
+          haptic(15);
+          renderSensorList();
+          saveSettings();
+        });
+      }
+
       els.sensorList.appendChild(li);
     });
   }
@@ -158,26 +190,35 @@
 
   async function handleEnableSensors() {
     haptic();
+    updateDebug('Requesting permissions...');
 
     if (SensorModule.needsPermissionRequest()) {
       const perms = await SensorModule.requestPermissions();
-      console.log('Permission results:', perms);
+      updateDebug('Permissions: ' + JSON.stringify(perms));
+    } else {
+      updateDebug('No permission request needed (non-iOS)');
     }
 
     SensorModule.startListening();
-    els.btnEnableSensors.textContent = 'Sensors Active';
+
+    if (SensorModule.isSimulating()) {
+      els.btnEnableSensors.textContent = 'Simulating (PC)';
+    } else {
+      els.btnEnableSensors.textContent = 'Sensors Active';
+    }
     els.btnEnableSensors.disabled = true;
     els.btnEnableSensors.classList.add('btn-active');
 
     startVizLoop();
-    detectSensors();
+    renderSensorList();
   }
 
   let vizLoopId = null;
   function startVizLoop() {
     if (vizLoopId) return;
     function loop() {
-      const data = SensorModule.getData();
+      // Use getAllData for visualization (shows everything regardless of selection)
+      const data = SensorModule.getAllData();
       Visualization.update(data);
       vizLoopId = requestAnimationFrame(loop);
     }
@@ -206,6 +247,7 @@
 
     const interval = Math.round(1000 / sampleRate);
     broadcastInterval = setInterval(() => {
+      // getData returns only selected sensors (null for deselected)
       WSClient.sendSensorData(SensorModule.getData());
     }, interval);
   }
@@ -274,6 +316,13 @@
   function updatePacketRate() {
     if (els.packetRate) {
       els.packetRate.textContent = WSClient.getPacketsPerSec() + ' pkt/s';
+    }
+  }
+
+  function updateDebug(msg) {
+    console.log('[WOB]', msg);
+    if (els.debugInfo) {
+      els.debugInfo.textContent = msg;
     }
   }
 

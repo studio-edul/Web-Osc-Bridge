@@ -1,16 +1,21 @@
 /**
  * WOB Sensor Module
  * Detects available sensors, handles permissions, collects and normalizes data.
+ * Supports per-sensor enable/disable toggling.
  */
 const SensorModule = (() => {
-  // Sensor availability
+  // Sensor availability (browser support)
   const availability = {
     motion: false,
     orientation: false,
     geolocation: false,
-    microphone: false,
-    ambientLight: false,
-    proximity: false,
+  };
+
+  // Which sensors are selected for broadcast
+  const selected = {
+    motion: true,
+    orientation: true,
+    geolocation: false,
   };
 
   // Current sensor data (normalized)
@@ -32,35 +37,31 @@ const SensorModule = (() => {
   let motionListener = null;
   let orientListener = null;
   let geoWatchId = null;
-  let onDataCallback = null;
+
+  // Simulation mode (for PC testing)
+  let simulationMode = false;
+  let simInterval = null;
+  let simTime = 0;
 
   // Normalization constants
-  const ACCEL_MAX = 9.81; // 1g
+  const ACCEL_MAX = 9.81;
   const GYRO_MAX = 360;
 
   /**
    * Detect available sensors via feature detection
    */
   function detect() {
-    // Motion (accelerometer + gyroscope)
     availability.motion = typeof DeviceMotionEvent !== 'undefined';
-
-    // Orientation
     availability.orientation = typeof DeviceOrientationEvent !== 'undefined';
-
-    // Geolocation
     availability.geolocation = 'geolocation' in navigator;
-
-    // Microphone
-    availability.microphone = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-
-    // Ambient Light
-    availability.ambientLight = typeof AmbientLightSensor !== 'undefined';
-
-    // Proximity
-    availability.proximity = typeof ProximitySensor !== 'undefined';
-
     return { ...availability };
+  }
+
+  /**
+   * Check if this is likely a mobile device
+   */
+  function isMobileDevice() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   }
 
   /**
@@ -79,7 +80,6 @@ const SensorModule = (() => {
   async function requestPermissions() {
     const results = { motion: false, orientation: false, geo: false };
 
-    // iOS motion permission
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
         const perm = await DeviceMotionEvent.requestPermission();
@@ -91,7 +91,6 @@ const SensorModule = (() => {
       results.motion = availability.motion;
     }
 
-    // iOS orientation permission
     if (typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
         const perm = await DeviceOrientationEvent.requestPermission();
@@ -103,8 +102,7 @@ const SensorModule = (() => {
       results.orientation = availability.orientation;
     }
 
-    // Geolocation permission
-    if (availability.geolocation) {
+    if (availability.geolocation && selected.geolocation) {
       try {
         await new Promise((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
@@ -119,11 +117,45 @@ const SensorModule = (() => {
   }
 
   /**
+   * Toggle sensor selection
+   */
+  function toggleSensor(key) {
+    if (key in selected) {
+      selected[key] = !selected[key];
+
+      // If sensors are already running, start/stop geolocation dynamically
+      if (sensorsEnabled && key === 'geolocation') {
+        if (selected.geolocation && geoWatchId === null) {
+          startGeolocation();
+        } else if (!selected.geolocation && geoWatchId !== null) {
+          navigator.geolocation.clearWatch(geoWatchId);
+          geoWatchId = null;
+          data.geo.lat = 0;
+          data.geo.lon = 0;
+        }
+      }
+    }
+    return { ...selected };
+  }
+
+  function setSensorSelected(key, value) {
+    if (key in selected) {
+      selected[key] = value;
+    }
+  }
+
+  /**
    * Start collecting sensor data
    */
-  function startListening(callback) {
-    onDataCallback = callback;
+  function startListening() {
     sensorsEnabled = true;
+
+    // If not on mobile, enable simulation mode
+    if (!isMobileDevice()) {
+      console.log('[Sensors] PC detected - enabling simulation mode');
+      startSimulation();
+      return;
+    }
 
     // DeviceMotion (accelerometer + gyroscope)
     if (availability.motion) {
@@ -133,12 +165,10 @@ const SensorModule = (() => {
         raw.accel.y = a.y || 0;
         raw.accel.z = a.z || 0;
 
-        // Normalize to -1..1
         data.accel.x = clamp(raw.accel.x / ACCEL_MAX, -1, 1);
         data.accel.y = clamp(raw.accel.y / ACCEL_MAX, -1, 1);
         data.accel.z = clamp(raw.accel.z / ACCEL_MAX, -1, 1);
 
-        // Gyroscope (rotation rate)
         const r = e.rotationRate || {};
         raw.gyro.alpha = r.alpha || 0;
         raw.gyro.beta = r.beta || 0;
@@ -158,7 +188,6 @@ const SensorModule = (() => {
         raw.orient.beta = e.beta || 0;
         raw.orient.gamma = e.gamma || 0;
 
-        // Normalize: alpha 0-360 -> 0-1, beta -180~180 -> 0-1, gamma -90~90 -> 0-1
         data.orient.alpha = (raw.orient.alpha % 360) / 360;
         data.orient.beta = (raw.orient.beta + 180) / 360;
         data.orient.gamma = (raw.orient.gamma + 90) / 180;
@@ -167,16 +196,45 @@ const SensorModule = (() => {
     }
 
     // Geolocation
-    if (availability.geolocation) {
-      geoWatchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          data.geo.lat = pos.coords.latitude;
-          data.geo.lon = pos.coords.longitude;
-        },
-        (err) => console.warn('Geo error:', err.message),
-        { enableHighAccuracy: true, maximumAge: 1000 }
-      );
+    if (availability.geolocation && selected.geolocation) {
+      startGeolocation();
     }
+  }
+
+  function startGeolocation() {
+    geoWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        data.geo.lat = pos.coords.latitude;
+        data.geo.lon = pos.coords.longitude;
+      },
+      (err) => console.warn('Geo error:', err.message),
+      { enableHighAccuracy: true, maximumAge: 1000 }
+    );
+  }
+
+  /**
+   * Simulation mode for PC testing
+   */
+  function startSimulation() {
+    simulationMode = true;
+    simInterval = setInterval(() => {
+      simTime += 0.03;
+
+      // Simulate accelerometer (gentle wave motion)
+      data.accel.x = Math.sin(simTime * 1.2) * 0.3;
+      data.accel.y = Math.cos(simTime * 0.8) * 0.2;
+      data.accel.z = Math.sin(simTime * 0.5) * 0.1 + 0.98;
+
+      // Simulate gyroscope
+      data.gyro.alpha = Math.sin(simTime * 2.0) * 0.15;
+      data.gyro.beta = Math.cos(simTime * 1.5) * 0.1;
+      data.gyro.gamma = Math.sin(simTime * 1.8) * 0.12;
+
+      // Simulate orientation
+      data.orient.alpha = (Math.sin(simTime * 0.3) + 1) / 2;
+      data.orient.beta = (Math.cos(simTime * 0.4) + 1) / 2;
+      data.orient.gamma = (Math.sin(simTime * 0.5) + 1) / 2;
+    }, 30);
   }
 
   /**
@@ -184,6 +242,12 @@ const SensorModule = (() => {
    */
   function stopListening() {
     sensorsEnabled = false;
+    simulationMode = false;
+
+    if (simInterval) {
+      clearInterval(simInterval);
+      simInterval = null;
+    }
     if (motionListener) {
       window.removeEventListener('devicemotion', motionListener);
       motionListener = null;
@@ -199,22 +263,26 @@ const SensorModule = (() => {
   }
 
   /**
-   * Get current data snapshot
+   * Get current data snapshot (only selected sensors)
    */
   function getData() {
+    return {
+      accel: selected.motion ? { ...data.accel } : null,
+      gyro: selected.motion ? { ...data.gyro } : null,
+      orient: selected.orientation ? { ...data.orient } : null,
+      geo: selected.geolocation ? { ...data.geo } : null,
+    };
+  }
+
+  /**
+   * Get all data (for visualization, regardless of selection)
+   */
+  function getAllData() {
     return {
       accel: { ...data.accel },
       gyro: { ...data.gyro },
       orient: { ...data.orient },
       geo: { ...data.geo },
-    };
-  }
-
-  function getRawData() {
-    return {
-      accel: { ...raw.accel },
-      gyro: { ...raw.gyro },
-      orient: { ...raw.orient },
     };
   }
 
@@ -228,9 +296,13 @@ const SensorModule = (() => {
     requestPermissions,
     startListening,
     stopListening,
+    toggleSensor,
+    setSensorSelected,
     getData,
-    getRawData,
+    getAllData,
     getAvailability: () => ({ ...availability }),
+    getSelected: () => ({ ...selected }),
     isEnabled: () => sensorsEnabled,
+    isSimulating: () => simulationMode,
   };
 })();

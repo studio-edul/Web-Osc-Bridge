@@ -110,20 +110,30 @@ const WSClient = (() => {
    * Format: { type, ax, ay, az, gα, gβ, gγ, oα, oβ, oγ, lat, lon }
    */
   function sendSensorData(sensorData) {
-    return send({
-      type: 'sensor',
-      ax: sensorData.accel.x,
-      ay: sensorData.accel.y,
-      az: sensorData.accel.z,
-      ga: sensorData.gyro.alpha,
-      gb: sensorData.gyro.beta,
-      gg: sensorData.gyro.gamma,
-      oa: sensorData.orient.alpha,
-      ob: sensorData.orient.beta,
-      og: sensorData.orient.gamma,
-      lat: sensorData.geo.lat,
-      lon: sensorData.geo.lon,
-    });
+    const msg = { type: 'sensor' };
+
+    // Only include selected sensors (non-null)
+    if (sensorData.accel) {
+      msg.ax = sensorData.accel.x;
+      msg.ay = sensorData.accel.y;
+      msg.az = sensorData.accel.z;
+    }
+    if (sensorData.gyro) {
+      msg.ga = sensorData.gyro.alpha;
+      msg.gb = sensorData.gyro.beta;
+      msg.gg = sensorData.gyro.gamma;
+    }
+    if (sensorData.orient) {
+      msg.oa = sensorData.orient.alpha;
+      msg.ob = sensorData.orient.beta;
+      msg.og = sensorData.orient.gamma;
+    }
+    if (sensorData.geo) {
+      msg.lat = sensorData.geo.lat;
+      msg.lon = sensorData.geo.lon;
+    }
+
+    return send(msg);
   }
 
   /**
