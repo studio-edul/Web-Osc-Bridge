@@ -111,5 +111,5 @@ npm run dev
 ## GitHub Pages 배포
 
 1. GitHub repo 생성 후 push
-2. Settings → Pages → Source: `main` branch, `/public` folder
+2. Settings → Pages → Source: `main` branch, `/docs` folder
 3. HTTPS가 자동 적용되어 모바일 센서 접근 가능
