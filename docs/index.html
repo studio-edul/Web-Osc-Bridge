@@ -18,7 +18,7 @@
       <div class="form-group">
         <label for="td-address">TouchDesigner IP:Port</label>
         <input type="text" id="td-address" placeholder="192.168.0.100:9980" autocomplete="off">
-        <small>TouchDesigner WebSocket DAT의 주소</small>
+        <small>TouchDesigner Web Server DAT의 주소</small>
       </div>
 
       <button id="btn-connect" class="btn btn-primary">Connect to TD</button>
@@ -26,12 +26,12 @@
       <div class="help-box">
         <p><strong>TD 설정 방법:</strong></p>
         <ol>
-          <li>WebSocket DAT 생성</li>
-          <li>Network Protocol → <code>WebSocket</code></li>
-          <li>Connection Type → <code>Server</code></li>
+          <li><strong>Web Server DAT</strong> 생성 (DAT → Web Server)</li>
           <li>Port → <code>9980</code></li>
           <li>Active → <code>On</code></li>
+          <li>Callbacks DAT에 JSON 파싱 코드 입력</li>
         </ol>
+        <p>자세한 설정은 README를 참고하세요.</p>
       </div>
     </div>
   </div>

@@ -5,7 +5,7 @@
 ## Architecture
 
 ```
-[Mobile Browser] ──WebSocket──> [TouchDesigner WebSocket DAT]
+[Mobile Browser] ──WebSocket──> [TouchDesigner Web Server DAT]
   (GitHub Pages)                   (수신 PC에서 실행 중)
 ```
 
@@ -15,37 +15,61 @@
 
 ### 1. TouchDesigner 설정
 
-1. **WebSocket DAT** 생성
-2. Parameters:
-   - Network Protocol → `WebSocket`
-   - Connection Type → `Server`
-   - Port → `9980`
-   - Active → `On`
+#### Step 1: Web Server DAT 생성
+1. OP Create Dialog → DAT → **Web Server**
+2. Parameters 설정:
+   - **Active** → `On`
+   - **Port** → `9980`
 
-3. WebSocket DAT의 Callbacks에서 JSON 파싱:
+#### Step 2: Constant CHOP 생성 (데이터 저장용)
+1. OP Create Dialog → CHOP → **Constant**
+2. Name → `sensor_vals`
+3. Parameters에서 채널 추가:
+   - `chan1` ~ `chan12` (ax, ay, az, ga, gb, gg, oa, ob, og, lat, lon, touch_count)
+
+#### Step 3: Callbacks DAT 설정
+Web Server DAT을 생성하면 자동으로 `webserverdat1_callbacks` DAT이 함께 생성됩니다.
+해당 Callbacks DAT에 아래 코드를 입력합니다:
 
 ```python
 import json
 
-def onReceiveText(dat, rowIndex, message, bytes, peer):
-    data = json.loads(message)
+def onWebSocketReceiveText(webServerDAT, client, data):
+	"""모바일에서 전송된 JSON 데이터를 파싱하여 Constant CHOP에 저장"""
+	try:
+		msg = json.loads(data)
+	except:
+		return
 
-    if data['type'] == 'sensor':
-        # data['ax'], data['ay'], data['az']  - Accelerometer (-1 ~ 1)
-        # data['ga'], data['gb'], data['gg']  - Gyroscope (-1 ~ 1)
-        # data['oa'], data['ob'], data['og']  - Orientation (0 ~ 1)
-        # data['lat'], data['lon']            - GPS
+	vals = op('sensor_vals')
 
-        op('sensor_vals').par.value0 = data['ax']
-        op('sensor_vals').par.value1 = data['ay']
-        op('sensor_vals').par.value2 = data['az']
+	if msg.get('type') == 'sensor':
+		vals.par.value0 = msg.get('ax', 0)   # Accel X
+		vals.par.value1 = msg.get('ay', 0)   # Accel Y
+		vals.par.value2 = msg.get('az', 0)   # Accel Z
+		vals.par.value3 = msg.get('ga', 0)   # Gyro Alpha
+		vals.par.value4 = msg.get('gb', 0)   # Gyro Beta
+		vals.par.value5 = msg.get('gg', 0)   # Gyro Gamma
+		vals.par.value6 = msg.get('oa', 0)   # Orient Alpha
+		vals.par.value7 = msg.get('ob', 0)   # Orient Beta
+		vals.par.value8 = msg.get('og', 0)   # Orient Gamma
+		vals.par.value9 = msg.get('lat', 0)  # GPS Lat
+		vals.par.value10 = msg.get('lon', 0) # GPS Lon
 
-    elif data['type'] == 'touch':
-        # data['count']     - Active touch count
-        # data['t0x'], data['t0y'], data['t0s']  - Touch 0 (x, y, state)
-        # data['t1x'], data['t1y'], data['t1s']  - Touch 1
-        pass
+	elif msg.get('type') == 'touch':
+		vals.par.value11 = msg.get('count', 0)
+		# 터치 좌표는 별도 Constant CHOP이나 Table DAT에 저장 가능
+
+def onWebSocketOpen(webServerDAT, client):
+	print(f'WOB: Client connected - {client}')
+
+def onWebSocketClose(webServerDAT, client):
+	print(f'WOB: Client disconnected - {client}')
 ```
+
+#### Step 4: 연결 확인
+- Web Server DAT의 테이블에 WebSocket 연결 상태가 표시됩니다
+- Constant CHOP에서 실시간으로 센서 값이 업데이트되는지 확인
 
 ### 2. 모바일 접속
 
@@ -113,3 +137,8 @@ npm run dev
 1. GitHub repo 생성 후 push
 2. Settings → Pages → Source: `main` branch, `/docs` folder
 3. HTTPS가 자동 적용되어 모바일 센서 접근 가능
+
+## References
+
+- [Web Server DAT - TouchDesigner Docs](https://docs.derivative.ca/Web_Server_DAT)
+- [WebSocket DAT - TouchDesigner Docs](https://docs.derivative.ca/WebSocket_DAT)
