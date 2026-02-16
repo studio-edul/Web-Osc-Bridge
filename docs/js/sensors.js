@@ -1,24 +1,20 @@
 /**
  * WOB Sensor Module
  * Detects available sensors, handles permissions, collects and normalizes data.
- * Supports per-sensor enable/disable toggling.
  */
 const SensorModule = (() => {
-  // Sensor availability (browser support)
   const availability = {
     motion: false,
     orientation: false,
     geolocation: false,
   };
 
-  // Which sensors are selected for broadcast
   const selected = {
     motion: true,
     orientation: true,
     geolocation: false,
   };
 
-  // Current sensor data (normalized)
   const data = {
     accel: { x: 0, y: 0, z: 0 },
     gyro: { alpha: 0, beta: 0, gamma: 0 },
@@ -26,30 +22,29 @@ const SensorModule = (() => {
     geo: { lat: 0, lon: 0 },
   };
 
-  // Raw data (for display)
-  const raw = {
-    accel: { x: 0, y: 0, z: 0 },
-    gyro: { alpha: 0, beta: 0, gamma: 0 },
-    orient: { alpha: 0, beta: 0, gamma: 0 },
-  };
-
   let sensorsEnabled = false;
   let motionListener = null;
   let orientListener = null;
   let geoWatchId = null;
+  let motionDataReceived = false;
+  let orientDataReceived = false;
 
-  // Simulation mode (for PC testing)
+  // Simulation
   let simulationMode = false;
   let simInterval = null;
   let simTime = 0;
 
-  // Normalization constants
   const ACCEL_MAX = 9.81;
   const GYRO_MAX = 360;
 
-  /**
-   * Detect available sensors via feature detection
-   */
+  // Debug callback
+  let onDebug = null;
+
+  function debug(msg) {
+    console.log('[Sensors]', msg);
+    if (onDebug) onDebug(msg);
+  }
+
   function detect() {
     availability.motion = typeof DeviceMotionEvent !== 'undefined';
     availability.orientation = typeof DeviceOrientationEvent !== 'undefined';
@@ -57,16 +52,11 @@ const SensorModule = (() => {
     return { ...availability };
   }
 
-  /**
-   * Check if this is likely a mobile device
-   */
   function isMobileDevice() {
-    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window);
   }
 
-  /**
-   * Check if iOS requires permission request
-   */
   function needsPermissionRequest() {
     return (
       typeof DeviceMotionEvent !== 'undefined' &&
@@ -75,33 +65,44 @@ const SensorModule = (() => {
   }
 
   /**
-   * Request sensor permissions (must be called from user gesture on iOS)
+   * Request iOS permissions - MUST be called directly from user tap
    */
   async function requestPermissions() {
     const results = { motion: false, orientation: false, geo: false };
 
-    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    // iOS DeviceMotion permission
+    if (typeof DeviceMotionEvent !== 'undefined' &&
+        typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
+        debug('Requesting DeviceMotion permission...');
         const perm = await DeviceMotionEvent.requestPermission();
         results.motion = perm === 'granted';
+        debug('Motion permission: ' + perm);
       } catch (e) {
-        console.warn('Motion permission denied:', e);
+        debug('Motion permission error: ' + e.message);
       }
     } else {
       results.motion = availability.motion;
+      debug('Motion: no permission needed (non-iOS)');
     }
 
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS DeviceOrientation permission
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
+        debug('Requesting DeviceOrientation permission...');
         const perm = await DeviceOrientationEvent.requestPermission();
         results.orientation = perm === 'granted';
+        debug('Orientation permission: ' + perm);
       } catch (e) {
-        console.warn('Orientation permission denied:', e);
+        debug('Orientation permission error: ' + e.message);
       }
     } else {
       results.orientation = availability.orientation;
+      debug('Orientation: no permission needed');
     }
 
+    // Geolocation
     if (availability.geolocation && selected.geolocation) {
       try {
         await new Promise((resolve, reject) => {
@@ -109,21 +110,16 @@ const SensorModule = (() => {
         });
         results.geo = true;
       } catch (e) {
-        console.warn('Geolocation permission denied:', e);
+        debug('Geo permission error: ' + e.message);
       }
     }
 
     return results;
   }
 
-  /**
-   * Toggle sensor selection
-   */
   function toggleSensor(key) {
     if (key in selected) {
       selected[key] = !selected[key];
-
-      // If sensors are already running, start/stop geolocation dynamically
       if (sensorsEnabled && key === 'geolocation') {
         if (selected.geolocation && geoWatchId === null) {
           startGeolocation();
@@ -139,66 +135,86 @@ const SensorModule = (() => {
   }
 
   function setSensorSelected(key, value) {
-    if (key in selected) {
-      selected[key] = value;
-    }
+    if (key in selected) selected[key] = value;
   }
 
   /**
-   * Start collecting sensor data
+   * Start listening - call AFTER requestPermissions on iOS
    */
   function startListening() {
+    // Clean up previous listeners first
+    stopListening();
     sensorsEnabled = true;
+    motionDataReceived = false;
+    orientDataReceived = false;
 
-    // If not on mobile, enable simulation mode
     if (!isMobileDevice()) {
-      console.log('[Sensors] PC detected - enabling simulation mode');
+      debug('PC detected - simulation mode');
       startSimulation();
       return;
     }
 
-    // DeviceMotion (accelerometer + gyroscope)
+    debug('Starting sensor listeners...');
+
+    // DeviceMotion
     if (availability.motion) {
       motionListener = (e) => {
-        const a = e.accelerationIncludingGravity || {};
-        raw.accel.x = a.x || 0;
-        raw.accel.y = a.y || 0;
-        raw.accel.z = a.z || 0;
+        const a = e.accelerationIncludingGravity;
+        if (a) {
+          if (!motionDataReceived) {
+            motionDataReceived = true;
+            debug('Motion data flowing! accel=' +
+              (a.x != null ? a.x.toFixed(2) : 'null') + ',' +
+              (a.y != null ? a.y.toFixed(2) : 'null') + ',' +
+              (a.z != null ? a.z.toFixed(2) : 'null'));
+          }
+          data.accel.x = clamp((a.x || 0) / ACCEL_MAX, -1, 1);
+          data.accel.y = clamp((a.y || 0) / ACCEL_MAX, -1, 1);
+          data.accel.z = clamp((a.z || 0) / ACCEL_MAX, -1, 1);
+        }
 
-        data.accel.x = clamp(raw.accel.x / ACCEL_MAX, -1, 1);
-        data.accel.y = clamp(raw.accel.y / ACCEL_MAX, -1, 1);
-        data.accel.z = clamp(raw.accel.z / ACCEL_MAX, -1, 1);
-
-        const r = e.rotationRate || {};
-        raw.gyro.alpha = r.alpha || 0;
-        raw.gyro.beta = r.beta || 0;
-        raw.gyro.gamma = r.gamma || 0;
-
-        data.gyro.alpha = clamp(raw.gyro.alpha / GYRO_MAX, -1, 1);
-        data.gyro.beta = clamp(raw.gyro.beta / GYRO_MAX, -1, 1);
-        data.gyro.gamma = clamp(raw.gyro.gamma / GYRO_MAX, -1, 1);
+        const r = e.rotationRate;
+        if (r) {
+          data.gyro.alpha = clamp((r.alpha || 0) / GYRO_MAX, -1, 1);
+          data.gyro.beta = clamp((r.beta || 0) / GYRO_MAX, -1, 1);
+          data.gyro.gamma = clamp((r.gamma || 0) / GYRO_MAX, -1, 1);
+        }
       };
       window.addEventListener('devicemotion', motionListener);
+      debug('devicemotion listener added');
+    } else {
+      debug('DeviceMotionEvent not available');
     }
 
     // DeviceOrientation
     if (availability.orientation) {
       orientListener = (e) => {
-        raw.orient.alpha = e.alpha || 0;
-        raw.orient.beta = e.beta || 0;
-        raw.orient.gamma = e.gamma || 0;
-
-        data.orient.alpha = (raw.orient.alpha % 360) / 360;
-        data.orient.beta = (raw.orient.beta + 180) / 360;
-        data.orient.gamma = (raw.orient.gamma + 90) / 180;
+        if (!orientDataReceived && e.alpha !== null) {
+          orientDataReceived = true;
+          debug('Orientation data flowing! a=' +
+            (e.alpha ? e.alpha.toFixed(1) : 'null'));
+        }
+        data.orient.alpha = ((e.alpha || 0) % 360) / 360;
+        data.orient.beta = ((e.beta || 0) + 180) / 360;
+        data.orient.gamma = ((e.gamma || 0) + 90) / 180;
       };
       window.addEventListener('deviceorientation', orientListener);
+      debug('deviceorientation listener added');
     }
 
     // Geolocation
     if (availability.geolocation && selected.geolocation) {
       startGeolocation();
     }
+
+    // Check if data arrives after 2 seconds
+    setTimeout(() => {
+      if (sensorsEnabled && !simulationMode) {
+        if (!motionDataReceived && !orientDataReceived) {
+          debug('WARNING: No sensor data after 2s. Permission may be denied.');
+        }
+      }
+    }, 2000);
   }
 
   function startGeolocation() {
@@ -207,47 +223,32 @@ const SensorModule = (() => {
         data.geo.lat = pos.coords.latitude;
         data.geo.lon = pos.coords.longitude;
       },
-      (err) => console.warn('Geo error:', err.message),
+      (err) => debug('Geo error: ' + err.message),
       { enableHighAccuracy: true, maximumAge: 1000 }
     );
   }
 
-  /**
-   * Simulation mode for PC testing
-   */
   function startSimulation() {
     simulationMode = true;
     simInterval = setInterval(() => {
       simTime += 0.03;
-
-      // Simulate accelerometer (gentle wave motion)
       data.accel.x = Math.sin(simTime * 1.2) * 0.3;
       data.accel.y = Math.cos(simTime * 0.8) * 0.2;
       data.accel.z = Math.sin(simTime * 0.5) * 0.1 + 0.98;
-
-      // Simulate gyroscope
       data.gyro.alpha = Math.sin(simTime * 2.0) * 0.15;
       data.gyro.beta = Math.cos(simTime * 1.5) * 0.1;
       data.gyro.gamma = Math.sin(simTime * 1.8) * 0.12;
-
-      // Simulate orientation
       data.orient.alpha = (Math.sin(simTime * 0.3) + 1) / 2;
       data.orient.beta = (Math.cos(simTime * 0.4) + 1) / 2;
       data.orient.gamma = (Math.sin(simTime * 0.5) + 1) / 2;
     }, 30);
   }
 
-  /**
-   * Stop collecting
-   */
   function stopListening() {
     sensorsEnabled = false;
     simulationMode = false;
 
-    if (simInterval) {
-      clearInterval(simInterval);
-      simInterval = null;
-    }
+    if (simInterval) { clearInterval(simInterval); simInterval = null; }
     if (motionListener) {
       window.removeEventListener('devicemotion', motionListener);
       motionListener = null;
@@ -260,11 +261,14 @@ const SensorModule = (() => {
       navigator.geolocation.clearWatch(geoWatchId);
       geoWatchId = null;
     }
+
+    // Reset data
+    data.accel.x = data.accel.y = data.accel.z = 0;
+    data.gyro.alpha = data.gyro.beta = data.gyro.gamma = 0;
+    data.orient.alpha = data.orient.beta = data.orient.gamma = 0;
+    data.geo.lat = data.geo.lon = 0;
   }
 
-  /**
-   * Get current data snapshot (only selected sensors)
-   */
   function getData() {
     return {
       accel: selected.motion ? { ...data.accel } : null,
@@ -274,9 +278,6 @@ const SensorModule = (() => {
     };
   }
 
-  /**
-   * Get all data (for visualization, regardless of selection)
-   */
   function getAllData() {
     return {
       accel: { ...data.accel },
@@ -304,5 +305,7 @@ const SensorModule = (() => {
     getSelected: () => ({ ...selected }),
     isEnabled: () => sensorsEnabled,
     isSimulating: () => simulationMode,
+    setDebugCallback: (cb) => { onDebug = cb; },
+    hasDataFlowing: () => motionDataReceived || orientDataReceived,
   };
 })();

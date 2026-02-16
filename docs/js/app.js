@@ -82,6 +82,7 @@
     loadSettings();
     bindEvents();
     renderSensorList();
+    SensorModule.setDebugCallback((msg) => updateDebug(msg));
   }
 
   function bindEvents() {
@@ -190,6 +191,18 @@
 
   async function handleEnableSensors() {
     haptic();
+
+    // Toggle: if sensors are already enabled, deactivate them
+    if (SensorModule.isEnabled()) {
+      SensorModule.stopListening();
+      els.btnEnableSensors.textContent = 'Enable Sensors';
+      els.btnEnableSensors.classList.remove('btn-active');
+      updateDebug('Sensors deactivated');
+      renderSensorList();
+      return;
+    }
+
+    // Activate sensors - always request permissions (iOS popup every time)
     updateDebug('Requesting permissions...');
 
     if (SensorModule.needsPermissionRequest()) {
@@ -202,11 +215,10 @@
     SensorModule.startListening();
 
     if (SensorModule.isSimulating()) {
-      els.btnEnableSensors.textContent = 'Simulating (PC)';
+      els.btnEnableSensors.textContent = 'Deactivate (Simulating)';
     } else {
-      els.btnEnableSensors.textContent = 'Sensors Active';
+      els.btnEnableSensors.textContent = 'Deactivate Sensors';
     }
-    els.btnEnableSensors.disabled = true;
     els.btnEnableSensors.classList.add('btn-active');
 
     startVizLoop();
