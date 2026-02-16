@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>WOB - Web to TouchDesigner</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Connection Modal -->
+  <div id="connection-modal" class="modal active">
+    <div class="modal-content">
+      <h1 class="logo">WOB</h1>
+      <p class="subtitle">Web to TouchDesigner Bridge</p>
+
+      <div class="form-group">
+        <label for="td-address">TouchDesigner IP:Port</label>
+        <input type="text" id="td-address" placeholder="192.168.0.100:9980" autocomplete="off">
+        <small>TouchDesigner WebSocket DAT의 주소</small>
+      </div>
+
+      <button id="btn-connect" class="btn btn-primary">Connect to TD</button>
+
+      <div class="help-box">
+        <p><strong>TD 설정 방법:</strong></p>
+        <ol>
+          <li>WebSocket DAT 생성</li>
+          <li>Network Protocol → <code>WebSocket</code></li>
+          <li>Connection Type → <code>Server</code></li>
+          <li>Port → <code>9980</code></li>
+          <li>Active → <code>On</code></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Interface -->
+  <div id="main-ui" class="hidden">
+    <!-- Top Bar -->
+    <header id="top-bar">
+      <div class="status-row">
+        <span id="connection-status" class="status-dot disconnected"></span>
+        <span id="connection-label">Disconnected</span>
+        <span id="packet-rate" class="packet-rate">0 pkt/s</span>
+      </div>
+      <div class="control-row">
+        <button id="btn-settings" class="btn btn-small">Settings</button>
+        <button id="btn-toggle-hud" class="btn btn-small">Hide HUD</button>
+        <button id="btn-fullscreen-touch" class="btn btn-small">Touch Pad</button>
+      </div>
+    </header>
+
+    <!-- Settings Panel (collapsible) -->
+    <div id="settings-panel" class="panel hidden">
+      <div class="form-group">
+        <label for="sample-rate">Sample Rate: <span id="sample-rate-value">30</span> Hz</label>
+        <input type="range" id="sample-rate" min="5" max="60" value="30" step="5">
+      </div>
+      <div class="form-group inline">
+        <label>
+          <input type="checkbox" id="wake-lock" checked> Wake Lock (화면 꺼짐 방지)
+        </label>
+      </div>
+      <div class="form-group inline">
+        <label>
+          <input type="checkbox" id="haptic-feedback" checked> Haptic Feedback
+        </label>
+      </div>
+      <button id="btn-disconnect" class="btn btn-danger btn-small">Disconnect</button>
+    </div>
+
+    <!-- Sensor Status -->
+    <div id="sensor-panel" class="panel">
+      <h3>Sensors</h3>
+      <ul id="sensor-list" class="sensor-list">
+        <!-- Populated by JS -->
+      </ul>
+      <button id="btn-enable-sensors" class="btn btn-primary">Enable Sensors</button>
+    </div>
+
+    <!-- Visualization Canvas -->
+    <div id="viz-container">
+      <canvas id="viz-canvas"></canvas>
+    </div>
+
+    <!-- Broadcast Control -->
+    <div id="broadcast-bar">
+      <button id="btn-broadcast" class="btn btn-broadcast">Start Broadcast</button>
+    </div>
+
+    <!-- Fullscreen Touch Pad (togglable) -->
+    <div id="touch-pad" class="hidden">
+      <canvas id="touch-canvas"></canvas>
+      <button id="btn-exit-touch" class="btn btn-small btn-exit-touch">Exit Touch Pad</button>
+    </div>
+  </div>
+
+  <script src="js/websocket.js"></script>
+  <script src="js/sensors.js"></script>
+  <script src="js/touch.js"></script>
+  <script src="js/visualization.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

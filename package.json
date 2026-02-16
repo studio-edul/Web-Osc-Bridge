@@ -1,0 +1,11 @@
+{
+  "name": "web-osc-bridge",
+  "version": "1.0.0",
+  "description": "WOB - Web OSC Bridge: Browser sensor data to OSC/UDP bridge",
+  "scripts": {
+    "dev": "node server/index.js",
+    "start": "node server/index.js"
+  },
+  "keywords": ["osc", "websocket", "sensor", "touchdesigner", "bridge"],
+  "license": "MIT"
+}
