@@ -16,22 +16,22 @@
       <p class="subtitle">Web to TouchDesigner Bridge</p>
 
       <div class="form-group">
-        <label for="td-address">TouchDesigner IP:Port</label>
+        <label for="td-address">TouchDesigner 주소</label>
         <input type="text" id="td-address" placeholder="192.168.0.100:9980" autocomplete="off">
-        <small>TouchDesigner Web Server DAT의 주소</small>
+        <small>TD PC의 로컬 IP와 포트 입력 (예: 192.168.0.100:9980)</small>
       </div>
 
       <button id="btn-connect" class="btn btn-primary">Connect to TD</button>
 
       <div class="help-box">
-        <p><strong>TD 설정 방법:</strong></p>
+        <p><strong>처음 사용 시 (1회만):</strong></p>
         <ol>
-          <li><strong>Web Server DAT</strong> 생성 (DAT → Web Server)</li>
-          <li>Port → <code>9980</code></li>
-          <li>Active → <code>On</code></li>
-          <li>Callbacks DAT에 JSON 파싱 코드 입력</li>
+          <li>TD Web Server DAT → Port 9980, TLS 설정, Active On</li>
+          <li>모바일에서 <code>https://[TD-IP]:9980</code> 접속</li>
+          <li>"연결이 비공개가 아닙니다" 경고 → <strong>고급 → 계속</strong></li>
+          <li>자동으로 이 앱으로 이동 + 주소 자동 입력됨</li>
         </ol>
-        <p>자세한 설정은 README를 참고하세요.</p>
+        <p><strong>이후 접속:</strong> 바로 주소 입력 후 Connect</p>
       </div>
     </div>
   </div>
@@ -45,6 +45,7 @@
         <span id="connection-label">Disconnected</span>
         <span id="packet-rate" class="packet-rate">0 pkt/s</span>
       </div>
+      <div id="connection-error" class="connection-error hidden"></div>
       <div class="control-row">
         <button id="btn-settings" class="btn btn-small">Settings</button>
         <button id="btn-toggle-hud" class="btn btn-small">Hide HUD</button>

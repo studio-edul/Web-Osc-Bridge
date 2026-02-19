@@ -272,6 +272,18 @@ input[type="checkbox"] {
   font-weight: 500;
 }
 
+.connection-error {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--danger);
+  background: rgba(255, 80, 80, 0.12);
+  border-radius: 4px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
 .packet-rate {
   margin-left: auto;
   font-size: 12px;

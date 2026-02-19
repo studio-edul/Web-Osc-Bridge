@@ -28,6 +28,7 @@
     els.btnConnect = $('btn-connect');
     els.connectionStatus = $('connection-status');
     els.connectionLabel = $('connection-label');
+    els.connectionError = $('connection-error');
     els.packetRate = $('packet-rate');
     els.btnSettings = $('btn-settings');
     els.settingsPanel = $('settings-panel');
@@ -84,6 +85,11 @@
   function init() {
     cacheDom();
     loadSettings();
+    // URL 파라미터 ?td= 로 넘어온 주소가 있으면 자동 입력 (저장된 값 없을 때만)
+    if (!els.tdAddress.value) {
+      const td = new URLSearchParams(window.location.search).get('td');
+      if (td) els.tdAddress.value = td;
+    }
     bindEvents();
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
@@ -170,6 +176,7 @@
 
     WSClient.connect(addr, {
       onStatusChange: updateConnectionStatus,
+      onErrorDetail: updateConnectionError,
     });
 
     els.modal.classList.remove('active');
@@ -178,6 +185,7 @@
     Visualization.init(els.vizCanvas);
     resizeTouchCanvas();
     window.addEventListener('resize', resizeTouchCanvas);
+    startVizTouch();
 
     if (els.wakeLockCheck.checked) {
       requestWakeLock();
@@ -186,6 +194,7 @@
 
   function handleDisconnect() {
     stopBroadcast();
+    stopVizTouch();
     SensorModule.stopListening();
     WSClient.disconnect();
     releaseWakeLock();
@@ -206,10 +215,12 @@
       return;
     }
 
-    // Activate sensors - always request permissions (iOS popup every time)
-    updateDebug('Requesting permissions...');
-
     if (SensorModule.needsPermissionRequest()) {
+      if (!window.isSecureContext) {
+        updateDebug('iOS 센서 권한은 HTTPS 필요. npm run dev:https 실행 후 https://IP:3000 접속');
+        return;
+      }
+      updateDebug('Requesting permissions...');
       const perms = await SensorModule.requestPermissions();
       updateDebug('Permissions: ' + JSON.stringify(perms));
     } else {
@@ -294,16 +305,32 @@
     updateDebug('Broadcast 중지됨');
   }
 
+  function handleTouchData(snapshot) {
+    if (broadcasting && WSClient.isConnected() && SensorModule.getSelected().touch) {
+      WSClient.sendTouchData(snapshot);
+    }
+  }
+
+  function startVizTouch() {
+    if (!els.vizContainer) return;
+    TouchModule.init(els.vizContainer, (snapshot) => {
+      handleTouchData(snapshot);
+    });
+  }
+
+  function stopVizTouch() {
+    TouchModule.destroy();
+  }
+
   function enterTouchPad() {
     touchPadActive = true;
+    stopVizTouch();
     els.touchPad.classList.remove('hidden');
     resizeTouchCanvas();
 
     TouchModule.init(els.touchCanvas, (snapshot) => {
       Visualization.drawTouches(els.touchCanvas, snapshot.touches);
-      if (broadcasting && WSClient.isConnected() && SensorModule.getSelected().touch) {
-        WSClient.sendTouchData(snapshot);
-      }
+      handleTouchData(snapshot);
     });
     haptic();
   }
@@ -312,6 +339,7 @@
     touchPadActive = false;
     els.touchPad.classList.add('hidden');
     TouchModule.destroy();
+    startVizTouch();
     haptic();
   }
 
@@ -343,6 +371,21 @@
       error: 'Connection Error',
     };
     label.textContent = labels[status] || status;
+    if (status !== 'error' && els.connectionError) {
+      els.connectionError.textContent = '';
+      els.connectionError.classList.add('hidden');
+    }
+  }
+
+  function updateConnectionError(msg) {
+    if (!els.connectionError) return;
+    if (msg) {
+      els.connectionError.textContent = msg;
+      els.connectionError.classList.remove('hidden');
+    } else {
+      els.connectionError.textContent = '';
+      els.connectionError.classList.add('hidden');
+    }
   }
 
   function updatePacketRate() {
