@@ -85,14 +85,17 @@
   function init() {
     cacheDom();
     loadSettings();
-    // URL 파라미터 ?td= 로 넘어온 주소가 있으면 자동 입력 (저장된 값 없을 때만)
-    if (!els.tdAddress.value) {
-      const td = new URLSearchParams(window.location.search).get('td');
-      if (td) els.tdAddress.value = td;
-    }
     bindEvents();
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
+
+    // ?td= 파라미터로 넘어온 경우 자동 연결
+    const td = new URLSearchParams(window.location.search).get('td');
+    if (td) {
+      els.tdAddress.value = td;
+      history.replaceState(null, '', window.location.pathname); // URL에서 파라미터 제거
+      handleConnect();
+    }
   }
 
   function bindEvents() {
