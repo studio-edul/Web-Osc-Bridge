@@ -26,11 +26,9 @@ const WSClient = (() => {
     onStatusChange = callbacks.onStatusChange || null;
     onErrorDetail = callbacks.onErrorDetail || null;
 
-    if (url.startsWith('ws://') && window.location.protocol === 'https:') {
-      url = 'wss://' + url.slice(5); // HTTPS 페이지에서 ws:// → wss:// 강제 업그레이드
-    } else if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
-      url = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + url;
-    }
+    // Strip any existing protocol prefix, then re-add the correct one
+    url = url.replace(/^(wss?|https?):\/\//, '');
+    url = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + url;
     serverUrl = url;
     _createConnection();
   }

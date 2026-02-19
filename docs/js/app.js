@@ -177,7 +177,7 @@
     saveSettings();
     haptic();
 
-    addLog('Connecting to: wss://' + addr, 'info');
+    addLog('Connecting to: ' + addr, 'info');
     WSClient.connect(addr, {
       onStatusChange: (status) => {
         updateConnectionStatus(status);
