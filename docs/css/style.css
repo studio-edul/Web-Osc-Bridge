@@ -1,6 +1,25 @@
 /* WOB - Web OSC Bridge Styles */
 /* Dark theme, mobile-first, touch-friendly */
 
+/* ===== On-screen Log Panel ===== */
+.log-panel {
+  margin-top: 8px;
+  padding: 8px;
+  background: #080810;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: flex;
+  flex-direction: column;
+}
+
 :root {
   --bg: #0a0a0f;
   --surface: #14141f;

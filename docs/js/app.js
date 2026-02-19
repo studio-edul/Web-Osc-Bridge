@@ -174,9 +174,16 @@
     saveSettings();
     haptic();
 
+    addLog('Connecting to: wss://' + addr, 'info');
     WSClient.connect(addr, {
-      onStatusChange: updateConnectionStatus,
-      onErrorDetail: updateConnectionError,
+      onStatusChange: (status) => {
+        updateConnectionStatus(status);
+        addLog('WS status: ' + status, status === 'connected' ? 'info' : status === 'error' ? 'error' : 'warn');
+      },
+      onErrorDetail: (msg) => {
+        updateConnectionError(msg);
+        if (msg) addLog(msg, 'error');
+      },
     });
 
     els.modal.classList.remove('active');
@@ -394,11 +401,33 @@
     }
   }
 
-  function updateDebug(msg) {
+  const LOG_MAX = 30;
+  const logLines = [];
+
+  function addLog(msg, level) {
+    const time = new Date().toTimeString().slice(0, 8);
+    const line = { time, msg, level: level || 'info' };
+    logLines.push(line);
+    if (logLines.length > LOG_MAX) logLines.shift();
+    _renderLog();
     console.log('[WOB]', msg);
-    if (els.debugInfo) {
-      els.debugInfo.textContent = msg;
-    }
+  }
+
+  function _renderLog() {
+    const el = els.debugInfo;
+    if (!el) return;
+    el.innerHTML = logLines.slice().reverse().map(l => {
+      const color = l.level === 'error' ? '#ff6677' : l.level === 'warn' ? '#ffaa33' : '#6a9f6a';
+      return `<span style="color:${color}">[${l.time}] ${_esc(l.msg)}</span>`;
+    }).join('\n');
+  }
+
+  function _esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  }
+
+  function updateDebug(msg) {
+    addLog(msg, 'info');
   }
 
   async function requestWakeLock() {
