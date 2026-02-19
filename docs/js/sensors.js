@@ -7,12 +7,14 @@ const SensorModule = (() => {
     motion: false,
     orientation: false,
     geolocation: false,
+    touch: false,
   };
 
   const selected = {
-    motion: true,
-    orientation: true,
+    motion: false,
+    orientation: false,
     geolocation: false,
+    touch: false,
   };
 
   const data = {
@@ -49,6 +51,7 @@ const SensorModule = (() => {
     availability.motion = typeof DeviceMotionEvent !== 'undefined';
     availability.orientation = typeof DeviceOrientationEvent !== 'undefined';
     availability.geolocation = 'geolocation' in navigator;
+    availability.touch = 'ontouchstart' in window || typeof TouchEvent !== 'undefined';
     return { ...availability };
   }
 

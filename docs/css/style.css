@@ -279,6 +279,11 @@ input[type="checkbox"] {
   color: var(--text-dim);
 }
 
+.packet-rate.broadcasting {
+  color: var(--success);
+  font-weight: 600;
+}
+
 .control-row {
   display: flex;
   gap: 6px;
@@ -330,7 +335,7 @@ input[type="checkbox"] {
 .sensor-list li.available.deselected {
   border-color: var(--border);
   color: var(--text-dim);
-  opacity: 0.5;
+  opacity: 1;
 }
 
 .sensor-list li.available:active {
@@ -366,6 +371,28 @@ input[type="checkbox"] {
   padding: 10px 12px;
   background: var(--surface);
   border-top: 1px solid var(--border);
+}
+
+.broadcast-status {
+  font-size: 12px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.broadcast-status.error {
+  background: rgba(255, 80, 80, 0.15);
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.broadcast-status:empty {
+  display: none;
+  margin: 0;
+  padding: 0;
 }
 
 /* Touch Pad */

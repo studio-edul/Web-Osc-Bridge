@@ -18,6 +18,7 @@
     { key: 'motion', name: 'Motion (Accel + Gyro)', icon: '&#x1F4F1;' },
     { key: 'orientation', name: 'Orientation', icon: '&#x1F9ED;' },
     { key: 'geolocation', name: 'Geolocation (GPS)', icon: '&#x1F4CD;' },
+    { key: 'touch', name: 'Touch Point', icon: '&#x1F4BB;' },
   ];
 
   function cacheDom() {
@@ -41,12 +42,15 @@
     els.btnFullscreenTouch = $('btn-fullscreen-touch');
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
+    els.broadcastStatus = $('broadcast-status');
     els.btnBroadcast = $('btn-broadcast');
     els.touchPad = $('touch-pad');
     els.touchCanvas = $('touch-canvas');
     els.btnExitTouch = $('btn-exit-touch');
     els.debugInfo = $('debug-info');
   }
+
+  const SETTINGS_VERSION = 2;
 
   function loadSettings() {
     const saved = localStorage.getItem('wob-settings');
@@ -59,8 +63,7 @@
           sampleRate = s.sampleRate;
           els.sampleRateValue.textContent = s.sampleRate;
         }
-        // Restore sensor selection
-        if (s.sensorSelection) {
+        if (s.version >= SETTINGS_VERSION && s.sensorSelection) {
           for (const [key, val] of Object.entries(s.sensorSelection)) {
             SensorModule.setSensorSelected(key, val);
           }
@@ -71,6 +74,7 @@
 
   function saveSettings() {
     localStorage.setItem('wob-settings', JSON.stringify({
+      version: SETTINGS_VERSION,
       tdAddress: els.tdAddress.value,
       sampleRate: sampleRate,
       sensorSelection: SensorModule.getSelected(),
@@ -242,20 +246,33 @@
     else startBroadcast();
   }
 
+  function showBroadcastStatus(msg, isError) {
+    if (!els.broadcastStatus) return;
+    els.broadcastStatus.textContent = msg;
+    els.broadcastStatus.className = 'broadcast-status' + (isError ? ' error' : '');
+  }
+
   function startBroadcast() {
     if (!WSClient.isConnected()) {
-      alert('TouchDesigner에 연결되어 있지 않습니다.');
+      const msg = '1. TouchDesigner에 연결하세요 (Connect to TD) → 상단이 녹색 "Connected to TD"인지 확인';
+      showBroadcastStatus(msg, true);
+      updateDebug('Broadcast 실패: ' + msg);
       return;
     }
     if (!SensorModule.isEnabled()) {
-      alert('먼저 센서를 활성화하세요.');
+      const msg = '2. 먼저 [Enable Sensors] 버튼을 눌러 센서를 활성화하세요';
+      showBroadcastStatus(msg, true);
+      updateDebug('Broadcast 실패: ' + msg);
       return;
     }
 
+    showBroadcastStatus('', false);
     haptic();
     broadcasting = true;
     els.btnBroadcast.textContent = 'Stop Broadcast';
     els.btnBroadcast.classList.add('broadcasting');
+    if (els.packetRate) els.packetRate.classList.add('broadcasting');
+    updateDebug('Broadcasting... ' + sampleRate + ' Hz');
 
     const interval = Math.round(1000 / sampleRate);
     broadcastInterval = setInterval(() => {
@@ -272,6 +289,9 @@
     }
     els.btnBroadcast.textContent = 'Start Broadcast';
     els.btnBroadcast.classList.remove('broadcasting');
+    if (els.packetRate) els.packetRate.classList.remove('broadcasting');
+    showBroadcastStatus('', false);
+    updateDebug('Broadcast 중지됨');
   }
 
   function enterTouchPad() {
@@ -281,7 +301,7 @@
 
     TouchModule.init(els.touchCanvas, (snapshot) => {
       Visualization.drawTouches(els.touchCanvas, snapshot.touches);
-      if (broadcasting && WSClient.isConnected()) {
+      if (broadcasting && WSClient.isConnected() && SensorModule.getSelected().touch) {
         WSClient.sendTouchData(snapshot);
       }
     });
