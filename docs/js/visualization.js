@@ -57,32 +57,33 @@ const Visualization = (() => {
   function update(sensorData) {
     if (!ctx) return;
 
-    // Push data into history
-    channels.forEach((ch) => {
+    // Only process active channels (non-null sensor group)
+    const active = channels.filter((ch) => sensorData[ch.group] != null);
+
+    active.forEach((ch) => {
       const buf = history[ch.key];
-      // Shift left
       buf.copyWithin(0, 1);
-      // Get value from sensor data
-      const val = sensorData[ch.group] ? (sensorData[ch.group][ch.axis] || 0) : 0;
-      buf[HISTORY_LENGTH - 1] = val;
+      buf[HISTORY_LENGTH - 1] = sensorData[ch.group][ch.axis] || 0;
     });
 
     if (visible) {
-      render(sensorData);
+      render(active);
     }
   }
 
-  function render(sensorData) {
+  function render(active) {
     const w = canvas.width / (window.devicePixelRatio || 1);
     const h = canvas.height / (window.devicePixelRatio || 1);
 
     ctx.clearRect(0, 0, w, h);
 
-    const rowHeight = Math.floor(h / channels.length);
+    if (active.length === 0) return;
+
+    const rowHeight = Math.floor(h / active.length);
     const graphWidth = w - 140; // Leave space for label + value
     const graphLeft = 90;
 
-    channels.forEach((ch, i) => {
+    active.forEach((ch, i) => {
       const y = i * rowHeight;
       const centerY = y + rowHeight / 2;
       const buf = history[ch.key];
