@@ -1,20 +1,47 @@
 import json
 
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
-# Default - overridden by wob_config DAT at init_tables() time
+# Default - overridden by config_table DAT at init_tables() time
 MAX_CLIENTS = 20
 
-# Maps client address -> slot number (1~MAX_CLIENTS)
-_client_slots = {}
-# Available slot pool
-_free_slots = list(range(1, MAX_CLIENTS + 1))
-# Touch count per slot - tracked in Python to avoid reading back from TD table
-_slot_touch_count = {}
+SENSOR_COLS = [
+	'slot', 'connected',
+	'ax', 'ay', 'az',
+	'ga', 'gb', 'gg',
+	'oa', 'ob', 'og',
+	'lat', 'lon',
+	'touch_count',
+	'trig',
+]
 
+# ── Persistent state (survives module reload via op('/').store/fetch) ──────────
+# These are stored in TD's global root op so module reloads don't reset them.
+
+def _slots():
+	"""Returns client_slots dict {addr: slot}."""
+	return op('/').fetch('wob_client_slots', {})
+
+def _free():
+	"""Returns free_slots list."""
+	return op('/').fetch('wob_free_slots', list(range(1, MAX_CLIENTS + 1)))
+
+def _touch():
+	"""Returns touch_count dict {slot: count}."""
+	return op('/').fetch('wob_touch_count', {})
+
+def _save_slots(d):
+	op('/').store('wob_client_slots', d)
+
+def _save_free(lst):
+	op('/').store('wob_free_slots', lst)
+
+def _save_touch(d):
+	op('/').store('wob_touch_count', d)
+
+# ──────────────────────────────────────────────────────────────────────────────
 
 def _read_config():
-	"""Read settings from wob_config Table DAT (key | value).
-	Falls back to defaults if DAT not found."""
+	"""Read settings from wob_config Table DAT (key | value)."""
 	cfg = op('wob_config')
 	if cfg is None:
 		return {}
@@ -26,19 +53,10 @@ def _read_config():
 			pass
 	return out
 
-SENSOR_COLS = [
-	'slot', 'connected',
-	'ax', 'ay', 'az',
-	'ga', 'gb', 'gg',
-	'oa', 'ob', 'og',
-	'lat', 'lon',
-	'touch_count',
-]
-
 
 def init_tables():
 	"""Initialize sensor_table and touch_table DATs. Called from Execute DAT onStart()."""
-	global _client_slots, _free_slots, _slot_touch_count, MAX_CLIENTS
+	global MAX_CLIENTS
 
 	cfg = _read_config()
 	if 'max_clients' in cfg:
@@ -47,9 +65,10 @@ def init_tables():
 		except ValueError:
 			pass
 
-	_client_slots = {}
-	_free_slots = list(range(1, MAX_CLIENTS + 1))
-	_slot_touch_count = {}
+	# Reset persistent state
+	_save_slots({})
+	_save_free(list(range(1, MAX_CLIENTS + 1)))
+	_save_touch({})
 
 	t = op('sensor_table')
 	if t is not None:
@@ -71,8 +90,29 @@ def init_tables():
 		print('[WOB] touch_table DAT not found - create a Table DAT named "touch_table"')
 
 
+def broadcast_config(webServerDAT):
+	"""Push updated config to all connected clients.
+	Call from TD script after editing config_table:
+	    op('web_server_dat').module.broadcast_config(op('web_server_dat'))
+	config_table keys: sample_rate, wake_lock, haptic
+	"""
+	cfg = _read_config()
+	msg = json.dumps({
+		'type': 'config',
+		'sample_rate': int(cfg.get('sample_rate', 30)),
+		'wake_lock':   int(cfg.get('wake_lock', 1)),
+		'haptic':      int(cfg.get('haptic', 1)),
+	})
+	for addr in list(_slots().keys()):
+		try:
+			webServerDAT.webSocketSendText(addr, msg)
+		except Exception:
+			pass
+	print(f'[WOB] Config broadcast -> {len(_slots())} clients')
+
+
 def onHTTPRequest(webServerDAT, request, response):
-	"""Serve cert acceptance page and redirect to GitHub Pages with TD address as param."""
+	"""Redirect to GitHub Pages with TD address as param."""
 	stored_url = op('/').fetch('wob_url', '')
 	host = stored_url.replace('https://', '').replace('http://', '').strip()
 	if not host:
@@ -109,49 +149,65 @@ def onHTTPRequest(webServerDAT, request, response):
 
 
 def onWebSocketOpen(webServerDAT, client):
-	global _free_slots
 	try:
 		addr = str(client)
-		print(f'[WOB] WS open from {addr}')
+		free = _free()
 
-		if not _free_slots:
-			print(f'[WOB] No slots available (max {MAX_CLIENTS}). Connection ignored: {addr}')
+		if not free:
+			print(f'[WOB] No slots available (max {MAX_CLIENTS}). Rejected: {addr}')
+			webServerDAT.webSocketSendText(client, json.dumps({
+				'type': 'rejected',
+				'reason': f'Server is currently full ({MAX_CLIENTS} devices connected). Please try again in a moment.',
+			}))
 			return
 
-		slot = _free_slots.pop(0)
-		_client_slots[addr] = slot
+		slot = free.pop(0)
+		slots = _slots()
+		slots[addr] = slot
+		_save_slots(slots)
+		_save_free(free)
 
 		t = op('sensor_table')
 		if t is not None:
 			t[slot, 'connected'] = 1
-		else:
-			print('[WOB] WARN: sensor_table not found in onWebSocketOpen')
 
-		print(f'[WOB] Client connected -> slot {slot} | {addr} | {MAX_CLIENTS - len(_free_slots)} active')
-
+		print(f'[WOB] Connected -> slot {slot} | {addr} | {MAX_CLIENTS - len(free)} active')
 		webServerDAT.webSocketSendText(client, json.dumps({'type': 'ack', 'slot': slot}))
+
+		# Push current config to the newly connected client
+		cfg = _read_config()
+		webServerDAT.webSocketSendText(client, json.dumps({
+			'type': 'config',
+			'sample_rate': int(cfg.get('sample_rate', 30)),
+			'wake_lock':   int(cfg.get('wake_lock', 1)),
+			'haptic':      int(cfg.get('haptic', 1)),
+		}))
 	except Exception as e:
 		print(f'[WOB] ERROR in onWebSocketOpen: {e}')
 
 
 def onWebSocketClose(webServerDAT, client):
-	global _free_slots
 	addr = str(client)
-	slot = _client_slots.pop(addr, None)
+	slots = _slots()
+	slot = slots.pop(addr, None)
 
 	if slot is None:
 		return
 
-	_free_slots.append(slot)
-	_free_slots.sort()
-	_slot_touch_count.pop(slot, None)
+	free = _free()
+	free.append(slot)
+	free.sort()
+	_save_slots(slots)
+	_save_free(free)
 
-	# Reset sensor_table row in one call
+	touch = _touch()
+	touch.pop(slot, None)
+	_save_touch(touch)
+
 	t = op('sensor_table')
 	if t is not None:
-		t.replaceRow(slot, [slot, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+		t.replaceRow(slot, [slot, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
-	# Remove touch_table rows for this slot
 	tt = op('touch_table')
 	if tt is not None:
 		rows_to_delete = [
@@ -161,25 +217,26 @@ def onWebSocketClose(webServerDAT, client):
 		for r in reversed(rows_to_delete):
 			tt.deleteRow(r)
 
-	print(f'[WOB] Client disconnected -> slot {slot} | {addr} | {MAX_CLIENTS - len(_free_slots)} active')
+	print(f'[WOB] Disconnected -> slot {slot} | {addr} | {MAX_CLIENTS - len(free)} active')
 
 
 def onWebSocketReceiveText(webServerDAT, client, data):
-	global _free_slots
 	addr = str(client)
-	slot = _client_slots.get(addr)
+	slots = _slots()
+	slot = slots.get(addr)
+
 	if slot is None:
-		# Module was reloaded while client was connected - auto-recover slot
-		if _free_slots:
-			slot = _free_slots.pop(0)
-			_client_slots[addr] = slot
-			t2 = op('sensor_table')
-			if t2 is not None:
-				t2[slot, 'connected'] = 1
-			print(f'[WOB] Recovered slot {slot} for {addr} after module reload')
-		else:
-			print(f'[WOB] WARN: data from unknown addr={addr}, no free slots')
+		free = _free()
+		if not free:
 			return
+		slot = free.pop(0)
+		slots[addr] = slot
+		_save_slots(slots)
+		_save_free(free)
+		t2 = op('sensor_table')
+		if t2 is not None:
+			t2[slot, 'connected'] = 1
+		print(f'[WOB] Recovered slot {slot} for {addr}')
 
 	try:
 		msg = json.loads(data)
@@ -193,22 +250,31 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		if t is None:
 			return
 		g = msg.get
-		# Single replaceRow call instead of 11 individual cell writes
+		# Consume pending trig pulse (1 for one packet, then resets to 0)
+		trig_key = f'wob_trig_{slot}'
+		trig = op('/').fetch(trig_key, 0)
+		if trig:
+			op('/').store(trig_key, 0)
 		t.replaceRow(slot, [
 			slot, 1,
 			g('ax', 0), g('ay', 0), g('az', 0),
 			g('ga', 0), g('gb', 0), g('gg', 0),
 			g('oa', 0), g('ob', 0), g('og', 0),
 			g('lat', 0), g('lon', 0),
-			_slot_touch_count.get(slot, 0),
+			_touch().get(slot, 0),
+			trig,
 		])
 
 	elif msg_type == 'touch':
 		count = msg.get('count', 0)
-		_slot_touch_count[slot] = count
+		touch = _touch()
+		touch[slot] = count
+		_save_touch(touch)
+
 		t = op('sensor_table')
 		if t is not None:
 			t[slot, 'touch_count'] = count
+
 		tt = op('touch_table')
 		if tt is not None:
 			rows_to_delete = [
@@ -220,6 +286,9 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			g = msg.get
 			for i in range(count):
 				tt.appendRow([slot, i, g(f't{i}x', 0), g(f't{i}y', 0), g(f't{i}s', 0)])
+
+	elif msg_type == 'trigger':
+		op('/').store(f'wob_trig_{slot}', 1)
 
 	elif msg_type == 'hello':
 		print(f'[WOB] Hello from slot {slot} - OK')

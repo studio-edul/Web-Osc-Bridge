@@ -21,8 +21,9 @@ SENSOR_COLS = [
 	'oa', 'ob', 'og',
 	'lat', 'lon',
 	'touch_count',
+	'trig',
 ]
-MAX_CLIENTS = 5
+MAX_CLIENTS = 20
 
 def _init_tables():
 	t = op('sensor_table')
@@ -105,14 +106,20 @@ def generate():
 		url = f'https://{ip}:9980'
 		print(f'[WOB] Local URL: {url}')
 
-	print(f'[WOB] Final URL: {url}')
-	op('/').store('wob_url', url)  # Store globally for callbacks.py to access
-	op('wob_url_text').par.text = url
+	op('/').store('wob_url', url)  # Store ngrok URL internally for callbacks.py
+
+	# Build QR URL: point directly to GitHub Pages with ?td= param
+	# This skips the ngrok interstitial page entirely
+	host = url.replace('https://', '').replace('http://', '').strip()
+	GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
+	qr_url = GITHUB_PAGES_URL + '?td=' + host
+	op('wob_url_text').par.text = qr_url
+	print(f'[WOB] URL: {qr_url}')
 
 	# 3. Generate QR code
 	try:
 		qr = qrcode.QRCode(box_size=10, border=4)
-		qr.add_data(url)
+		qr.add_data(qr_url)
 		qr.make(fit=True)
 		img = qr.make_image(fill_color='black', back_color='white')
 		print('[WOB] QR image generated')
