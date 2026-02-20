@@ -143,7 +143,7 @@
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
     els.btnBroadcast.addEventListener('click', toggleBroadcast);
-    els.btnTrigger.addEventListener('click', sendTrigger);
+    els.btnTrigger.addEventListener('pointerup', sendTrigger);
 
     setInterval(updatePacketRate, 1000);
   }
@@ -430,11 +430,36 @@
       connecting: 'Connecting...',
       reconnecting: 'Reconnecting...',
       error: 'Connection Error',
+      rejected: 'Server Full',
     };
     label.textContent = labels[status] || status;
-    if (status !== 'error' && els.connectionError) {
+    if (status === 'rejected') {
+      // Show full-screen overlay so the user clearly sees the message
+      _showRejectedOverlay();
+    }
+    if (status !== 'error' && status !== 'rejected' && els.connectionError) {
       els.connectionError.textContent = '';
       els.connectionError.classList.add('hidden');
+    }
+  }
+
+  function _showRejectedOverlay() {
+    let overlay = document.getElementById('rejected-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'rejected-overlay';
+      overlay.innerHTML = `
+        <div class="rejected-box">
+          <div class="rejected-icon">&#x1F6AB;</div>
+          <h2>연결이 가득 찼어요</h2>
+          <p>현재 최대 접속 인원이 모두 사용 중입니다.<br>잠시 후 다시 시도해 주세요.</p>
+          <button id="btn-retry" class="btn btn-primary" style="margin-top:20px">다시 시도</button>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#btn-retry').addEventListener('click', () => {
+        overlay.remove();
+        handleConnect();
+      });
     }
   }
 

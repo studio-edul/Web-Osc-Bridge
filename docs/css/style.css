@@ -1,6 +1,40 @@
 /* WOB - Web OSC Bridge Styles */
 /* Dark theme, mobile-first, touch-friendly */
 
+/* ===== Server-full Rejection Overlay ===== */
+#rejected-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.rejected-box {
+  background: #1a1a2e;
+  border: 1px solid #ff4444;
+  border-radius: 16px;
+  padding: 40px 32px;
+  text-align: center;
+  max-width: 320px;
+  width: 90%;
+}
+.rejected-icon {
+  font-size: 3em;
+  margin-bottom: 12px;
+}
+.rejected-box h2 {
+  color: #ff6677;
+  margin: 0 0 12px;
+  font-size: 1.3em;
+}
+.rejected-box p {
+  color: #aaa;
+  line-height: 1.6;
+  margin: 0;
+}
+
 /* ===== On-screen Log Panel ===== */
 .log-panel {
   margin-top: 8px;
@@ -234,6 +268,8 @@ input[type="checkbox"] {
   color: #fff;
   border-radius: 12px;
   transition: background 0.1s;
+  touch-action: manipulation;
+  user-select: none;
 }
 .btn-trigger.triggered {
   background: #fff;

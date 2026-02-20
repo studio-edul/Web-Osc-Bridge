@@ -25,6 +25,7 @@ const WSClient = (() => {
   function connect(url, callbacks = {}) {
     onStatusChange = callbacks.onStatusChange || null;
     onErrorDetail = callbacks.onErrorDetail || null;
+    reconnectAttempts = 0; // reset in case previous session was rejected
 
     // Strip any existing protocol prefix, then re-add the correct one
     url = url.replace(/^(wss?|https?):\/\//, '');
@@ -66,6 +67,13 @@ const WSClient = (() => {
         if (msg.type === 'ack') {
           if (onStatusChange) onStatusChange('connected');
           console.log('[WS] TD ack, slot:', msg.slot);
+        } else if (msg.type === 'rejected') {
+          // Server full — cancel reconnect and surface the reason
+          if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+          reconnectAttempts = 999; // prevent further auto-reconnect
+          _reportError(msg.reason || 'Server full');
+          if (onStatusChange) onStatusChange('rejected');
+          ws.close(1000);
         }
       } catch (e) { /* ignore non-JSON */ }
     };
