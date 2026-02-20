@@ -251,6 +251,11 @@
 
     SensorModule.startListening();
 
+    // If WS is already connected, start broadcast immediately
+    if (WSClient.isConnected() && !broadcasting) {
+      startBroadcast();
+    }
+
     if (SensorModule.isSimulating()) {
       els.btnEnableSensors.textContent = 'Deactivate (Simulating)';
     } else {

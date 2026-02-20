@@ -132,18 +132,21 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 	addr = str(client.address)
 	slot = _client_slots.get(addr)
 	if slot is None:
+		print(f'[WOB] WARN: data from unknown addr={addr} | known={list(_client_slots.keys())}')
 		return
 
 	try:
 		msg = json.loads(data)
-	except:
+	except Exception as e:
+		print(f'[WOB] WARN: JSON parse error: {e}')
 		return
 
 	t = op('sensor_table')
+	if t is None:
+		print('[WOB] WARN: sensor_table not found')
+		return
 
 	if msg.get('type') == 'sensor':
-		if t is None:
-			return
 		t[slot, 'ax'] = msg.get('ax', 0)
 		t[slot, 'ay'] = msg.get('ay', 0)
 		t[slot, 'az'] = msg.get('az', 0)
