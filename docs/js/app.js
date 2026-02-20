@@ -46,6 +46,7 @@
     els.vizCanvas = $('viz-canvas');
     els.broadcastStatus = $('broadcast-status');
     els.btnBroadcast = $('btn-broadcast');
+    els.btnTrigger = $('btn-trigger');
     els.touchPad = $('touch-pad');
     els.touchCanvas = $('touch-canvas');
     els.btnExitTouch = $('btn-exit-touch');
@@ -142,6 +143,7 @@
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
     els.btnBroadcast.addEventListener('click', toggleBroadcast);
+    els.btnTrigger.addEventListener('click', sendTrigger);
 
     setInterval(updatePacketRate, 1000);
   }
@@ -346,6 +348,15 @@
     if (els.packetRate) els.packetRate.classList.remove('broadcasting');
     showBroadcastStatus('', false);
     updateDebug('Broadcast 중지됨');
+  }
+
+  function sendTrigger() {
+    if (!WSClient.isConnected()) return;
+    WSClient.send({ type: 'trigger' });
+    haptic(50);
+    // Visual flash feedback
+    els.btnTrigger.classList.add('triggered');
+    setTimeout(() => els.btnTrigger.classList.remove('triggered'), 150);
   }
 
   function handleTouchData(snapshot) {

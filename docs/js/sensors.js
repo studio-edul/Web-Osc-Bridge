@@ -171,16 +171,18 @@ const SensorModule = (() => {
               (a.y != null ? a.y.toFixed(2) : 'null') + ',' +
               (a.z != null ? a.z.toFixed(2) : 'null'));
           }
-          data.accel.x = clamp((a.x || 0) / ACCEL_MAX, -1, 1);
-          data.accel.y = clamp((a.y || 0) / ACCEL_MAX, -1, 1);
-          data.accel.z = clamp((a.z || 0) / ACCEL_MAX, -1, 1);
+          // Raw m/s² (gravity ~9.81 included)
+          data.accel.x = a.x || 0;
+          data.accel.y = a.y || 0;
+          data.accel.z = a.z || 0;
         }
 
         const r = e.rotationRate;
         if (r) {
-          data.gyro.alpha = clamp((r.alpha || 0) / GYRO_MAX, -1, 1);
-          data.gyro.beta = clamp((r.beta || 0) / GYRO_MAX, -1, 1);
-          data.gyro.gamma = clamp((r.gamma || 0) / GYRO_MAX, -1, 1);
+          // Raw deg/s
+          data.gyro.alpha = r.alpha || 0;
+          data.gyro.beta  = r.beta  || 0;
+          data.gyro.gamma = r.gamma || 0;
         }
       };
       window.addEventListener('devicemotion', motionListener);
@@ -197,9 +199,10 @@ const SensorModule = (() => {
           debug('Orientation data flowing! a=' +
             (e.alpha ? e.alpha.toFixed(1) : 'null'));
         }
-        data.orient.alpha = ((e.alpha || 0) % 360) / 360;
-        data.orient.beta = ((e.beta || 0) + 180) / 360;
-        data.orient.gamma = ((e.gamma || 0) + 90) / 180;
+        // Raw degrees
+        data.orient.alpha = e.alpha || 0;  // 0 ~ 360
+        data.orient.beta  = e.beta  || 0;  // -180 ~ 180
+        data.orient.gamma = e.gamma || 0;  // -90 ~ 90
       };
       window.addEventListener('deviceorientation', orientListener);
       debug('deviceorientation listener added');
@@ -235,15 +238,18 @@ const SensorModule = (() => {
     simulationMode = true;
     simInterval = setInterval(() => {
       simTime += 0.03;
-      data.accel.x = Math.sin(simTime * 1.2) * 0.3;
-      data.accel.y = Math.cos(simTime * 0.8) * 0.2;
-      data.accel.z = Math.sin(simTime * 0.5) * 0.1 + 0.98;
-      data.gyro.alpha = Math.sin(simTime * 2.0) * 0.15;
-      data.gyro.beta = Math.cos(simTime * 1.5) * 0.1;
-      data.gyro.gamma = Math.sin(simTime * 1.8) * 0.12;
-      data.orient.alpha = (Math.sin(simTime * 0.3) + 1) / 2;
-      data.orient.beta = (Math.cos(simTime * 0.4) + 1) / 2;
-      data.orient.gamma = (Math.sin(simTime * 0.5) + 1) / 2;
+      // Simulate raw m/s² (gravity ~9.81 on z when flat)
+      data.accel.x = Math.sin(simTime * 1.2) * 2.5;
+      data.accel.y = Math.cos(simTime * 0.8) * 2.0;
+      data.accel.z = Math.sin(simTime * 0.5) * 1.0 + 9.81;
+      // Simulate raw deg/s
+      data.gyro.alpha = Math.sin(simTime * 2.0) * 45;
+      data.gyro.beta  = Math.cos(simTime * 1.5) * 30;
+      data.gyro.gamma = Math.sin(simTime * 1.8) * 40;
+      // Simulate raw degrees
+      data.orient.alpha = ((Math.sin(simTime * 0.3) + 1) / 2) * 360;  // 0~360
+      data.orient.beta  = Math.sin(simTime * 0.4) * 90;                // -90~90
+      data.orient.gamma = Math.sin(simTime * 0.5) * 45;                // -45~45
     }, 30);
   }
 
