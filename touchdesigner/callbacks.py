@@ -131,6 +131,7 @@ def onWebSocketClose(webServerDAT, client):
 def onWebSocketReceiveText(webServerDAT, client, data):
 	global _free_slots
 	addr = str(client.address)
+	print(f'[WOB] RCV from {addr}: {data[:60]}')
 	slot = _client_slots.get(addr)
 	if slot is None:
 		# Module was reloaded while client was connected - auto-recover slot
