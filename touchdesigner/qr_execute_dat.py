@@ -1,5 +1,7 @@
 import socket
 import os
+import subprocess
+import time
 
 def get_local_ip():
 	try:
@@ -78,8 +80,13 @@ def generate():
 			print(f'[WOB] authtoken not found in: {config_path}')
 		# Inject token directly into PyngrokConfig (no file roundtrip)
 		pyngrok_config = conf.PyngrokConfig(auth_token=token) if token else conf.get_default()
-		# Kill any existing ngrok process to free up tunnel slots
+		# Kill ALL ngrok processes (pyngrok-managed + any external ones)
 		ngrok.kill()
+		try:
+			subprocess.run(['taskkill', '/F', '/IM', 'ngrok.exe'], capture_output=True)
+		except Exception:
+			pass
+		time.sleep(3)  # Wait for ngrok cloud to deregister the endpoint
 		print('[WOB] Starting ngrok tunnel... (TD Web Server DAT TLS must be OFF)')
 		tunnel = ngrok.connect(9980, 'http', pyngrok_config=pyngrok_config)
 		url = tunnel.public_url
