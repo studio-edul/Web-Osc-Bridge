@@ -13,6 +13,7 @@ const WSClient = (() => {
 
   let onStatusChange = null;
   let onErrorDetail = null;
+  let onConfig = null;
 
   // Packet counting
   let sentCount = 0;
@@ -25,6 +26,7 @@ const WSClient = (() => {
   function connect(url, callbacks = {}) {
     onStatusChange = callbacks.onStatusChange || null;
     onErrorDetail = callbacks.onErrorDetail || null;
+    onConfig = callbacks.onConfig || null;
     reconnectAttempts = 0; // reset in case previous session was rejected
 
     // Strip any existing protocol prefix, then re-add the correct one
@@ -67,6 +69,8 @@ const WSClient = (() => {
         if (msg.type === 'ack') {
           if (onStatusChange) onStatusChange('connected');
           console.log('[WS] TD ack, slot:', msg.slot);
+        } else if (msg.type === 'config') {
+          if (onConfig) onConfig(msg);
         } else if (msg.type === 'rejected') {
           // Server full — cancel reconnect and surface the reason
           if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }

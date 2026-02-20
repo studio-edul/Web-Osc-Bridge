@@ -1,6 +1,7 @@
 /**
  * WOB Main App Controller
  * Direct WebSocket connection to TouchDesigner.
+ * Settings (sample rate, wake lock, haptic) are pushed from TD via config message.
  */
 (() => {
   let broadcasting = false;
@@ -9,6 +10,7 @@
   let wakeLock = null;
   let hudVisible = true;
   let touchPadActive = false;
+  let hapticEnabled = true;
 
   const $ = (id) => document.getElementById(id);
   const els = {};
@@ -30,18 +32,12 @@
     els.connectionLabel = $('connection-label');
     els.connectionError = $('connection-error');
     els.packetRate = $('packet-rate');
-    els.btnSettings = $('btn-settings');
-    els.settingsPanel = $('settings-panel');
-    els.sampleRate = $('sample-rate');
-    els.sampleRateValue = $('sample-rate-value');
-    els.wakeLockCheck = $('wake-lock');
-    els.hapticCheck = $('haptic-feedback');
     els.btnDisconnect = $('btn-disconnect');
-    els.sensorList = $('sensor-list');
-    els.btnEnableSensors = $('btn-enable-sensors');
     els.btnToggleHud = $('btn-toggle-hud');
     els.btnToggleLog = $('btn-toggle-log');
     els.btnFullscreenTouch = $('btn-fullscreen-touch');
+    els.sensorList = $('sensor-list');
+    els.btnEnableSensors = $('btn-enable-sensors');
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
     els.broadcastStatus = $('broadcast-status');
@@ -53,20 +49,13 @@
     els.debugInfo = $('debug-info');
   }
 
-  const SETTINGS_VERSION = 2;
-
   function loadSettings() {
     const saved = localStorage.getItem('wob-settings');
     if (saved) {
       try {
         const s = JSON.parse(saved);
         if (s.tdAddress) els.tdAddress.value = s.tdAddress;
-        if (s.sampleRate) {
-          els.sampleRate.value = s.sampleRate;
-          sampleRate = s.sampleRate;
-          els.sampleRateValue.textContent = s.sampleRate;
-        }
-        if (s.version >= SETTINGS_VERSION && s.sensorSelection) {
+        if (s.sensorSelection) {
           for (const [key, val] of Object.entries(s.sensorSelection)) {
             SensorModule.setSensorSelected(key, val);
           }
@@ -77,11 +66,33 @@
 
   function saveSettings() {
     localStorage.setItem('wob-settings', JSON.stringify({
-      version: SETTINGS_VERSION,
       tdAddress: els.tdAddress.value,
-      sampleRate: sampleRate,
       sensorSelection: SensorModule.getSelected(),
     }));
+  }
+
+  /**
+   * Apply config pushed from TD via {type:'config'} message.
+   * config_table keys: sample_rate, wake_lock, haptic
+   */
+  function applyConfig(cfg) {
+    if (cfg.sample_rate != null) {
+      const rate = parseInt(cfg.sample_rate);
+      if (rate > 0 && rate !== sampleRate) {
+        sampleRate = rate;
+        addLog(`Config: sample_rate=${rate}Hz`, 'info');
+        if (broadcasting) { stopBroadcast(); startBroadcast(); }
+      }
+    }
+    if (cfg.wake_lock != null) {
+      if (parseInt(cfg.wake_lock)) requestWakeLock();
+      else releaseWakeLock();
+      addLog(`Config: wake_lock=${cfg.wake_lock}`, 'info');
+    }
+    if (cfg.haptic != null) {
+      hapticEnabled = !!parseInt(cfg.haptic);
+      addLog(`Config: haptic=${hapticEnabled}`, 'info');
+    }
   }
 
   function init() {
@@ -105,7 +116,6 @@
       els.tdAddress.value = td;
       history.replaceState(null, '', window.location.pathname);
       handleConnect();
-      // Auto-enable sensors on Android (no permission dialog needed)
       if (!SensorModule.needsPermissionRequest()) {
         handleEnableSensors();
       }
@@ -116,26 +126,6 @@
 
   function bindEvents() {
     els.btnConnect.addEventListener('click', handleConnect);
-
-    els.btnSettings.addEventListener('click', () => {
-      els.settingsPanel.classList.toggle('hidden');
-    });
-
-    els.sampleRate.addEventListener('input', (e) => {
-      sampleRate = parseInt(e.target.value);
-      els.sampleRateValue.textContent = sampleRate;
-      if (broadcasting) {
-        stopBroadcast();
-        startBroadcast();
-      }
-      saveSettings();
-    });
-
-    els.wakeLockCheck.addEventListener('change', (e) => {
-      if (e.target.checked) requestWakeLock();
-      else releaseWakeLock();
-    });
-
     els.btnDisconnect.addEventListener('click', handleDisconnect);
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnToggleHud.addEventListener('click', toggleHud);
@@ -148,9 +138,6 @@
     setInterval(updatePacketRate, 1000);
   }
 
-  /**
-   * Render sensor list with toggle functionality
-   */
   function renderSensorList() {
     const avail = SensorModule.detect();
     const selected = SensorModule.getSelected();
@@ -171,7 +158,6 @@
 
       li.innerHTML = `<span class="sensor-icon">${s.icon}</span> ${s.name}`;
 
-      // Add click handler for available sensors
       if (isAvailable) {
         li.addEventListener('click', () => {
           SensorModule.toggleSensor(s.key);
@@ -201,10 +187,8 @@
         updateConnectionStatus(status);
         addLog('WS status: ' + status, status === 'connected' ? 'info' : status === 'error' ? 'error' : 'warn');
         if (status === 'connected') {
-          // Send hello to verify the data channel is working
           WSClient.send({ type: 'hello' });
           addLog('Hello sent to TD', 'info');
-          // Auto-start broadcast if sensors are already enabled
           if (SensorModule.isEnabled() && !broadcasting) {
             addLog('Auto-starting broadcast', 'info');
             startBroadcast();
@@ -217,6 +201,7 @@
         updateConnectionError(msg);
         if (msg) addLog(msg, 'error');
       },
+      onConfig: (cfg) => applyConfig(cfg),
     });
 
     els.modal.classList.remove('active');
@@ -227,9 +212,7 @@
     window.addEventListener('resize', resizeTouchCanvas);
     startVizTouch();
 
-    if (els.wakeLockCheck.checked) {
-      requestWakeLock();
-    }
+    requestWakeLock(); // default on; TD can override via config
   }
 
   function handleDisconnect() {
@@ -245,7 +228,6 @@
   async function handleEnableSensors() {
     haptic();
 
-    // Toggle: if sensors are already enabled, deactivate them
     if (SensorModule.isEnabled()) {
       SensorModule.stopListening();
       els.btnEnableSensors.textContent = 'Enable Sensors';
@@ -257,7 +239,7 @@
 
     if (SensorModule.needsPermissionRequest()) {
       if (!window.isSecureContext) {
-        updateDebug('iOS 센서 권한은 HTTPS 필요. npm run dev:https 실행 후 https://IP:3000 접속');
+        updateDebug('iOS 센서 권한은 HTTPS 필요.');
         return;
       }
       updateDebug('Requesting permissions...');
@@ -269,7 +251,6 @@
 
     SensorModule.startListening();
 
-    // If WS is already connected, start broadcast immediately
     if (WSClient.isConnected() && !broadcasting) {
       startBroadcast();
     }
@@ -289,7 +270,6 @@
   function startVizLoop() {
     if (vizLoopId) return;
     function loop() {
-      // Use getData so only selected sensors are shown (deselected → null → 0)
       const data = SensorModule.getData();
       Visualization.update(data);
       vizLoopId = requestAnimationFrame(loop);
@@ -310,15 +290,13 @@
 
   function startBroadcast() {
     if (!WSClient.isConnected()) {
-      const msg = '1. TouchDesigner에 연결하세요 (Connect to TD) → 상단이 녹색 "Connected to TD"인지 확인';
+      const msg = '1. TouchDesigner에 연결하세요 (Connect to TD)';
       showBroadcastStatus(msg, true);
-      updateDebug('Broadcast 실패: ' + msg);
       return;
     }
     if (!SensorModule.isEnabled()) {
       const msg = '2. 먼저 [Enable Sensors] 버튼을 눌러 센서를 활성화하세요';
       showBroadcastStatus(msg, true);
-      updateDebug('Broadcast 실패: ' + msg);
       return;
     }
 
@@ -332,7 +310,6 @@
 
     const interval = Math.round(1000 / sampleRate);
     broadcastInterval = setInterval(() => {
-      // getData returns only selected sensors (null for deselected)
       WSClient.sendSensorData(SensorModule.getData());
     }, interval);
   }
@@ -354,7 +331,6 @@
     if (!WSClient.isConnected()) return;
     WSClient.send({ type: 'trigger' });
     haptic(50);
-    // Visual flash feedback
     els.btnTrigger.classList.add('triggered');
     setTimeout(() => els.btnTrigger.classList.remove('triggered'), 150);
   }
@@ -434,7 +410,6 @@
     };
     label.textContent = labels[status] || status;
     if (status === 'rejected') {
-      // Show full-screen overlay so the user clearly sees the message
       _showRejectedOverlay();
     }
     if (status !== 'error' && status !== 'rejected' && els.connectionError) {
@@ -525,13 +500,13 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && els.wakeLockCheck && els.wakeLockCheck.checked) {
+    if (document.visibilityState === 'visible' && wakeLock === null) {
       requestWakeLock();
     }
   });
 
   function haptic(duration = 30) {
-    if (els.hapticCheck && els.hapticCheck.checked && navigator.vibrate) {
+    if (hapticEnabled && navigator.vibrate) {
       navigator.vibrate(duration);
     }
   }
