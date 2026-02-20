@@ -188,6 +188,10 @@
       onStatusChange: (status) => {
         updateConnectionStatus(status);
         addLog('WS status: ' + status, status === 'connected' ? 'info' : status === 'error' ? 'error' : 'warn');
+        // Auto-start broadcast when connected and sensors are already enabled
+        if (status === 'connected' && SensorModule.isEnabled() && !broadcasting) {
+          startBroadcast();
+        }
       },
       onErrorDetail: (msg) => {
         updateConnectionError(msg);
