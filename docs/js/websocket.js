@@ -85,12 +85,12 @@ const WSClient = (() => {
 
   function _getCloseMessage(code, reason, url) {
     const hints = {
-      1006: '연결 실패 (서버 응답 없음). 가능: 잘못된 IP/포트, 방화벽, TD Web Server 꺼짐',
-      1002: '프로토콜 오류 (TD가 WebSocket을 지원하지 않을 수 있음)',
-      1011: '서버 측 오류',
-      1015: 'TLS 오류 (wss:// 관련)',
+      1006: 'Connection failed (no server response). Check: IP/port, firewall, TD Web Server DAT active, TLS OFF for ngrok',
+      1002: 'Protocol error (TD may not support WebSocket)',
+      1011: 'Server-side error',
+      1015: 'TLS error (wss:// related)',
     };
-    const hint = hints[code] || ('코드 ' + code);
+    const hint = hints[code] || ('code ' + code);
     return reason ? reason + ' | ' + hint : hint + ' | URL: ' + url;
   }
 

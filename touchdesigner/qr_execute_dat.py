@@ -78,6 +78,8 @@ def generate():
 			print(f'[WOB] authtoken not found in: {config_path}')
 		# Inject token directly into PyngrokConfig (no file roundtrip)
 		pyngrok_config = conf.PyngrokConfig(auth_token=token) if token else conf.get_default()
+		# Kill any existing ngrok process to free up tunnel slots
+		ngrok.kill()
 		print('[WOB] Starting ngrok tunnel... (TD Web Server DAT TLS must be OFF)')
 		tunnel = ngrok.connect(9980, 'http', pyngrok_config=pyngrok_config)
 		url = tunnel.public_url
