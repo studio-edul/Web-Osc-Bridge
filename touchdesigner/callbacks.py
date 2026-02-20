@@ -44,13 +44,12 @@ def onHTTPRequest(webServerDAT, request, response):
 	"""Serve cert acceptance page and redirect to GitHub Pages with TD address as param."""
 	# Use the URL stored at startup (set by qr_execute_dat.py) for reliable ngrok support.
 	# This avoids issues where ngrok rewrites the Host header to localhost.
-	host = ''
-	url_node = op('wob_url_text')
-	if url_node:
-		stored = str(url_node.par.text).strip()
-		host = stored.replace('https://', '').replace('http://', '')
+	# Fetch URL stored globally by qr_execute_dat.py at startup
+	stored_url = op('/').fetch('wob_url', '')
+	host = stored_url.replace('https://', '').replace('http://', '').strip()
 	if not host:
 		host = request.get('headers', {}).get('Host', '')
+	print(f'[WOB] HTTP request -> host: {host}')
 	redirect_url = GITHUB_PAGES_URL + ('?td=' + host if host else '')
 
 	response['statusCode'] = 200

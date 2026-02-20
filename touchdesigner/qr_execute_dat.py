@@ -99,6 +99,7 @@ def generate():
 		print(f'[WOB] Local URL: {url}')
 
 	print(f'[WOB] Final URL: {url}')
+	op('/').store('wob_url', url)  # Store globally for callbacks.py to access
 	op('wob_url_text').par.text = url
 
 	# 3. Generate QR code
