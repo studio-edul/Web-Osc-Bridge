@@ -40,6 +40,7 @@
     els.sensorList = $('sensor-list');
     els.btnEnableSensors = $('btn-enable-sensors');
     els.btnToggleHud = $('btn-toggle-hud');
+    els.btnToggleLog = $('btn-toggle-log');
     els.btnFullscreenTouch = $('btn-fullscreen-touch');
     els.vizContainer = $('viz-container');
     els.vizCanvas = $('viz-canvas');
@@ -129,6 +130,7 @@
     els.btnDisconnect.addEventListener('click', handleDisconnect);
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
     els.btnToggleHud.addEventListener('click', toggleHud);
+    els.btnToggleLog.addEventListener('click', toggleLog);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
     els.btnBroadcast.addEventListener('click', toggleBroadcast);
@@ -264,8 +266,8 @@
   function startVizLoop() {
     if (vizLoopId) return;
     function loop() {
-      // Use getAllData for visualization (shows everything regardless of selection)
-      const data = SensorModule.getAllData();
+      // Use getData so only selected sensors are shown (deselected → null → 0)
+      const data = SensorModule.getData();
       Visualization.update(data);
       vizLoopId = requestAnimationFrame(loop);
     }
@@ -370,6 +372,13 @@
     els.touchCanvas.height = window.innerHeight * dpr;
     els.touchCanvas.style.width = window.innerWidth + 'px';
     els.touchCanvas.style.height = window.innerHeight + 'px';
+  }
+
+  let logVisible = true;
+  function toggleLog() {
+    logVisible = !logVisible;
+    els.debugInfo.style.display = logVisible ? '' : 'none';
+    els.btnToggleLog.textContent = logVisible ? 'Hide Log' : 'Show Log';
   }
 
   function toggleHud() {
