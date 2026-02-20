@@ -1,38 +1,56 @@
 /**
  * WOB Visualization Module
- * Canvas-based sparkline graphs and real-time data display.
+ * Canvas-based sparklines grouped by sensor type.
+ * Channels within the same group (e.g. accel x/y/z) overlap on one row.
  */
 const Visualization = (() => {
   let canvas = null;
   let ctx = null;
   let visible = true;
-  let animFrameId = null;
 
-  // History buffers for sparklines
-  const HISTORY_LENGTH = 120; // ~2 seconds at 60fps
+  const HISTORY_LENGTH = 120; // ~2s at 60fps
   const history = {};
 
-  // Channel definitions: label, color, data path
-  const channels = [
-    { key: 'accel_x', label: 'Accel X', color: '#ff4444', group: 'accel', axis: 'x' },
-    { key: 'accel_y', label: 'Accel Y', color: '#44ff44', group: 'accel', axis: 'y' },
-    { key: 'accel_z', label: 'Accel Z', color: '#4488ff', group: 'accel', axis: 'z' },
-    { key: 'gyro_a', label: 'Gyro A', color: '#ff8844', group: 'gyro', axis: 'alpha' },
-    { key: 'gyro_b', label: 'Gyro B', color: '#44ffaa', group: 'gyro', axis: 'beta' },
-    { key: 'gyro_g', label: 'Gyro G', color: '#aa44ff', group: 'gyro', axis: 'gamma' },
-    { key: 'orient_a', label: 'Orient A', color: '#ffaa44', group: 'orient', axis: 'alpha' },
-    { key: 'orient_b', label: 'Orient B', color: '#44aaff', group: 'orient', axis: 'beta' },
-    { key: 'orient_g', label: 'Orient G', color: '#ff44aa', group: 'orient', axis: 'gamma' },
+  /**
+   * Sensor groups. Each group occupies one horizontal band.
+   * Channels within a group are drawn overlapping, with different colors.
+   * norm(v) maps raw value to [-1, 1] for plotting.
+   */
+  const groups = [
+    {
+      key: 'accel',
+      label: 'Accel\nm/s²',
+      channels: [
+        { key: 'accel_x', label: 'X', color: '#ff5555', axis: 'x',     norm: v => v / 20 },
+        { key: 'accel_y', label: 'Y', color: '#55ff55', axis: 'y',     norm: v => v / 20 },
+        { key: 'accel_z', label: 'Z', color: '#5599ff', axis: 'z',     norm: v => v / 20 },
+      ],
+    },
+    {
+      key: 'gyro',
+      label: 'Gyro\n°/s',
+      channels: [
+        { key: 'gyro_a', label: 'α', color: '#ff8844', axis: 'alpha',  norm: v => v / 360 },
+        { key: 'gyro_b', label: 'β', color: '#44ffaa', axis: 'beta',   norm: v => v / 360 },
+        { key: 'gyro_g', label: 'γ', color: '#cc55ff', axis: 'gamma',  norm: v => v / 360 },
+      ],
+    },
+    {
+      key: 'orient',
+      label: 'Orient\n°',
+      channels: [
+        { key: 'orient_a', label: 'α', color: '#ffcc44', axis: 'alpha', norm: v => (v - 180) / 180 }, // 0-360 → -1..1
+        { key: 'orient_b', label: 'β', color: '#44bbff', axis: 'beta',  norm: v => v / 180 },
+        { key: 'orient_g', label: 'γ', color: '#ff55aa', axis: 'gamma', norm: v => v / 90 },
+      ],
+    },
   ];
 
-  // Initialize history buffers
-  channels.forEach((ch) => {
+  // Init history buffers
+  groups.forEach(g => g.channels.forEach(ch => {
     history[ch.key] = new Float32Array(HISTORY_LENGTH);
-  });
+  }));
 
-  /**
-   * Initialize with canvas element
-   */
   function init(canvasElement) {
     canvas = canvasElement;
     ctx = canvas.getContext('2d');
@@ -51,80 +69,102 @@ const Visualization = (() => {
     ctx.scale(dpr, dpr);
   }
 
-  /**
-   * Push new data and render
-   */
   function update(sensorData) {
     if (!ctx) return;
 
-    // Only process active channels (non-null sensor group)
-    const active = channels.filter((ch) => sensorData[ch.group] != null);
+    const activeGroups = groups.filter(g => sensorData[g.key] != null);
 
-    active.forEach((ch) => {
-      const buf = history[ch.key];
-      buf.copyWithin(0, 1);
-      buf[HISTORY_LENGTH - 1] = sensorData[ch.group][ch.axis] || 0;
+    activeGroups.forEach(g => {
+      g.channels.forEach(ch => {
+        const buf = history[ch.key];
+        buf.copyWithin(0, 1);
+        buf[HISTORY_LENGTH - 1] = sensorData[g.key][ch.axis] || 0;
+      });
     });
 
-    if (visible) {
-      render(active);
-    }
+    if (visible) render(activeGroups);
   }
 
-  function render(active) {
-    const w = canvas.width / (window.devicePixelRatio || 1);
-    const h = canvas.height / (window.devicePixelRatio || 1);
+  function render(activeGroups) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
 
     ctx.clearRect(0, 0, w, h);
+    if (activeGroups.length === 0) return;
 
-    if (active.length === 0) return;
+    const LABEL_W = 52;  // left label column
+    const VALUE_W = 80;  // right value column
+    const graphLeft = LABEL_W;
+    const graphWidth = w - LABEL_W - VALUE_W;
+    const rowH = Math.floor(h / activeGroups.length);
 
-    const rowHeight = Math.floor(h / active.length);
-    const graphWidth = w - 140; // Leave space for label + value
-    const graphLeft = 90;
+    activeGroups.forEach((g, gi) => {
+      const rowTop = gi * rowH;
+      const centerY = rowTop + rowH / 2;
 
-    active.forEach((ch, i) => {
-      const y = i * rowHeight;
-      const centerY = y + rowHeight / 2;
-      const buf = history[ch.key];
-      const currentVal = buf[HISTORY_LENGTH - 1];
+      // Alternating row background
+      ctx.fillStyle = gi % 2 === 0
+        ? 'rgba(255,255,255,0.025)'
+        : 'rgba(0,0,0,0)';
+      ctx.fillRect(0, rowTop, w, rowH);
 
-      // Label
-      ctx.fillStyle = ch.color;
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'right';
-      ctx.fillText(ch.label, graphLeft - 8, centerY + 4);
-
-      // Current value
-      ctx.textAlign = 'left';
-      ctx.fillText(currentVal.toFixed(3), graphLeft + graphWidth + 6, centerY + 4);
-
-      // Sparkline background
-      ctx.fillStyle = 'rgba(255,255,255,0.03)';
-      ctx.fillRect(graphLeft, y + 2, graphWidth, rowHeight - 4);
+      // Group label (left, two lines)
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      const lines = g.label.split('\n');
+      lines.forEach((line, li) => {
+        const lineY = centerY - (lines.length - 1) * 6 + li * 12;
+        ctx.fillStyle = '#777';
+        ctx.fillText(line, LABEL_W / 2, lineY);
+      });
 
       // Center line
-      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
       ctx.lineWidth = 0.5;
       ctx.beginPath();
       ctx.moveTo(graphLeft, centerY);
       ctx.lineTo(graphLeft + graphWidth, centerY);
       ctx.stroke();
 
-      // Sparkline
-      ctx.strokeStyle = ch.color;
-      ctx.lineWidth = 1.5;
+      // Top / bottom boundary lines
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 0.5;
       ctx.beginPath();
-      for (let j = 0; j < HISTORY_LENGTH; j++) {
-        const x = graphLeft + (j / HISTORY_LENGTH) * graphWidth;
-        // Map -1..1 to rowHeight
-        const val = buf[j];
-        const plotY = centerY - val * (rowHeight / 2 - 4);
-
-        if (j === 0) ctx.moveTo(x, plotY);
-        else ctx.lineTo(x, plotY);
-      }
+      ctx.moveTo(graphLeft, rowTop + 1);
+      ctx.lineTo(graphLeft + graphWidth, rowTop + 1);
       ctx.stroke();
+
+      // Draw each channel overlapping
+      g.channels.forEach(ch => {
+        const buf = history[ch.key];
+        const halfH = rowH / 2 - 3;
+
+        ctx.strokeStyle = ch.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let j = 0; j < HISTORY_LENGTH; j++) {
+          const x = graphLeft + (j / HISTORY_LENGTH) * graphWidth;
+          const n = Math.max(-1, Math.min(1, ch.norm(buf[j])));
+          const plotY = centerY - n * halfH;
+          if (j === 0) ctx.moveTo(x, plotY);
+          else ctx.lineTo(x, plotY);
+        }
+        ctx.stroke();
+      });
+
+      // Current values (right column, one line per channel)
+      const nCh = g.channels.length;
+      const spacing = rowH / (nCh + 1);
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      g.channels.forEach((ch, ci) => {
+        const val = history[ch.key][HISTORY_LENGTH - 1];
+        const lineY = rowTop + spacing * (ci + 1);
+        ctx.fillStyle = ch.color;
+        const sign = val >= 0 ? ' ' : '';
+        ctx.fillText(`${ch.label}:${sign}${val.toFixed(1)}`, graphLeft + graphWidth + 4, lineY + 3);
+      });
     });
   }
 
@@ -153,7 +193,6 @@ const Visualization = (() => {
       tCtx.stroke();
     }
 
-    // Touch points
     const colors = ['#ff4444', '#44ff44', '#4488ff', '#ffaa44', '#ff44aa',
                      '#44ffaa', '#aa44ff', '#ffff44', '#44ffff', '#ff8888'];
 
@@ -162,20 +201,17 @@ const Visualization = (() => {
       const py = touch.y * h;
       const color = colors[idx % colors.length];
 
-      // Outer ring
       tCtx.strokeStyle = color;
       tCtx.lineWidth = 2;
       tCtx.beginPath();
       tCtx.arc(px, py, 30, 0, Math.PI * 2);
       tCtx.stroke();
 
-      // Inner dot
       tCtx.fillStyle = color;
       tCtx.beginPath();
       tCtx.arc(px, py, 8, 0, Math.PI * 2);
       tCtx.fill();
 
-      // Crosshair
       tCtx.strokeStyle = `${color}66`;
       tCtx.lineWidth = 1;
       tCtx.beginPath();
@@ -183,7 +219,6 @@ const Visualization = (() => {
       tCtx.moveTo(0, py); tCtx.lineTo(w, py);
       tCtx.stroke();
 
-      // Label
       tCtx.fillStyle = color;
       tCtx.font = '12px monospace';
       tCtx.textAlign = 'left';
@@ -195,27 +230,14 @@ const Visualization = (() => {
 
   function setVisible(v) {
     visible = v;
-    if (canvas) {
-      canvas.style.opacity = v ? '1' : '0';
-    }
+    if (canvas) canvas.style.opacity = v ? '1' : '0';
   }
 
-  function isVisible() {
-    return visible;
-  }
+  function isVisible() { return visible; }
 
   function destroy() {
     window.removeEventListener('resize', resize);
-    if (animFrameId) cancelAnimationFrame(animFrameId);
   }
 
-  return {
-    init,
-    update,
-    drawTouches,
-    setVisible,
-    isVisible,
-    resize,
-    destroy,
-  };
+  return { init, update, drawTouches, setVisible, isVisible, resize, destroy };
 })();

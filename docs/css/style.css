@@ -371,6 +371,22 @@ input[type="checkbox"] {
   flex-wrap: wrap;
 }
 
+.action-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.action-row .btn {
+  flex: 1;
+}
+
+.action-row #btn-enable-sensors.btn-active {
+  background: var(--success);
+  color: #000;
+  border-color: var(--success);
+}
+
 /* Panels */
 .panel {
   flex-shrink: 0;

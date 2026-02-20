@@ -8,7 +8,6 @@
   let sampleRate = 30;
   let broadcastInterval = null;
   let wakeLock = null;
-  let hudVisible = true;
   let touchPadActive = false;
   let hapticEnabled = true;
 
@@ -32,9 +31,6 @@
     els.connectionLabel = $('connection-label');
     els.connectionError = $('connection-error');
     els.packetRate = $('packet-rate');
-    els.btnDisconnect = $('btn-disconnect');
-    els.btnToggleHud = $('btn-toggle-hud');
-    els.btnToggleLog = $('btn-toggle-log');
     els.btnFullscreenTouch = $('btn-fullscreen-touch');
     els.sensorList = $('sensor-list');
     els.btnEnableSensors = $('btn-enable-sensors');
@@ -126,10 +122,7 @@
 
   function bindEvents() {
     els.btnConnect.addEventListener('click', handleConnect);
-    els.btnDisconnect.addEventListener('click', handleDisconnect);
     els.btnEnableSensors.addEventListener('click', handleEnableSensors);
-    els.btnToggleHud.addEventListener('click', toggleHud);
-    els.btnToggleLog.addEventListener('click', toggleLog);
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
     els.btnBroadcast.addEventListener('click', toggleBroadcast);
@@ -380,20 +373,6 @@
     els.touchCanvas.height = window.innerHeight * dpr;
     els.touchCanvas.style.width = window.innerWidth + 'px';
     els.touchCanvas.style.height = window.innerHeight + 'px';
-  }
-
-  let logVisible = true;
-  function toggleLog() {
-    logVisible = !logVisible;
-    els.debugInfo.style.display = logVisible ? '' : 'none';
-    els.btnToggleLog.textContent = logVisible ? 'Hide Log' : 'Show Log';
-  }
-
-  function toggleHud() {
-    hudVisible = !hudVisible;
-    Visualization.setVisible(hudVisible);
-    els.btnToggleHud.textContent = hudVisible ? 'Hide HUD' : 'Show HUD';
-    els.sensorList.parentElement.style.display = hudVisible ? '' : 'none';
   }
 
   function updateConnectionStatus(status) {

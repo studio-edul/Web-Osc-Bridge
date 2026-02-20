@@ -46,12 +46,6 @@
         <span id="packet-rate" class="packet-rate">0 pkt/s</span>
       </div>
       <div id="connection-error" class="connection-error hidden"></div>
-      <div class="control-row">
-        <button id="btn-disconnect" class="btn btn-small btn-danger">Disconnect</button>
-        <button id="btn-toggle-hud" class="btn btn-small">Hide HUD</button>
-        <button id="btn-toggle-log" class="btn btn-small">Hide Log</button>
-        <button id="btn-fullscreen-touch" class="btn btn-small">Touch Pad</button>
-      </div>
     </header>
 
     <!-- Sensor Status -->
@@ -60,8 +54,11 @@
       <ul id="sensor-list" class="sensor-list">
         <!-- Populated by JS -->
       </ul>
-      <button id="btn-enable-sensors" class="btn btn-primary">Enable Sensors</button>
-      <pre id="debug-info" class="log-panel"></pre>
+      <div class="action-row">
+        <button id="btn-fullscreen-touch" class="btn btn-small">Touch Pad</button>
+        <button id="btn-enable-sensors" class="btn btn-small">Enable Sensors</button>
+      </div>
+      <pre id="debug-info" class="log-panel hidden"></pre>
     </div>
 
     <!-- Visualization Canvas -->
