@@ -1,12 +1,30 @@
 import json
 
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
-MAX_CLIENTS = 5
+# Default - overridden by wob_config DAT at init_tables() time
+MAX_CLIENTS = 20
 
-# Maps client address -> slot number (1~5)
+# Maps client address -> slot number (1~MAX_CLIENTS)
 _client_slots = {}
 # Available slot pool
 _free_slots = list(range(1, MAX_CLIENTS + 1))
+# Touch count per slot - tracked in Python to avoid reading back from TD table
+_slot_touch_count = {}
+
+
+def _read_config():
+	"""Read settings from wob_config Table DAT (key | value).
+	Falls back to defaults if DAT not found."""
+	cfg = op('wob_config')
+	if cfg is None:
+		return {}
+	out = {}
+	for r in range(1, cfg.numRows):
+		try:
+			out[str(cfg[r, 0])] = str(cfg[r, 1])
+		except Exception:
+			pass
+	return out
 
 SENSOR_COLS = [
 	'slot', 'connected',
@@ -20,6 +38,19 @@ SENSOR_COLS = [
 
 def init_tables():
 	"""Initialize sensor_table and touch_table DATs. Called from Execute DAT onStart()."""
+	global _client_slots, _free_slots, _slot_touch_count, MAX_CLIENTS
+
+	cfg = _read_config()
+	if 'max_clients' in cfg:
+		try:
+			MAX_CLIENTS = max(1, int(cfg['max_clients']))
+		except ValueError:
+			pass
+
+	_client_slots = {}
+	_free_slots = list(range(1, MAX_CLIENTS + 1))
+	_slot_touch_count = {}
+
 	t = op('sensor_table')
 	if t is not None:
 		t.clear()
@@ -42,9 +73,6 @@ def init_tables():
 
 def onHTTPRequest(webServerDAT, request, response):
 	"""Serve cert acceptance page and redirect to GitHub Pages with TD address as param."""
-	# Use the URL stored at startup (set by qr_execute_dat.py) for reliable ngrok support.
-	# This avoids issues where ngrok rewrites the Host header to localhost.
-	# Fetch URL stored globally by qr_execute_dat.py at startup
 	stored_url = op('/').fetch('wob_url', '')
 	host = stored_url.replace('https://', '').replace('http://', '').strip()
 	if not host:
@@ -82,25 +110,33 @@ def onHTTPRequest(webServerDAT, request, response):
 
 def onWebSocketOpen(webServerDAT, client):
 	global _free_slots
-	addr = str(client.address)
+	try:
+		addr = str(client)
+		print(f'[WOB] WS open from {addr}')
 
-	if not _free_slots:
-		print(f'[WOB] No slots available (max {MAX_CLIENTS}). Connection ignored: {addr}')
-		return
+		if not _free_slots:
+			print(f'[WOB] No slots available (max {MAX_CLIENTS}). Connection ignored: {addr}')
+			return
 
-	slot = _free_slots.pop(0)
-	_client_slots[addr] = slot
+		slot = _free_slots.pop(0)
+		_client_slots[addr] = slot
 
-	t = op('sensor_table')
-	if t is not None:
-		t[slot, 'connected'] = 1
+		t = op('sensor_table')
+		if t is not None:
+			t[slot, 'connected'] = 1
+		else:
+			print('[WOB] WARN: sensor_table not found in onWebSocketOpen')
 
-	print(f'[WOB] Client connected -> slot {slot} | {addr} | {MAX_CLIENTS - len(_free_slots)} active')
+		print(f'[WOB] Client connected -> slot {slot} | {addr} | {MAX_CLIENTS - len(_free_slots)} active')
+
+		webServerDAT.webSocketSendText(client, json.dumps({'type': 'ack', 'slot': slot}))
+	except Exception as e:
+		print(f'[WOB] ERROR in onWebSocketOpen: {e}')
 
 
 def onWebSocketClose(webServerDAT, client):
 	global _free_slots
-	addr = str(client.address)
+	addr = str(client)
 	slot = _client_slots.pop(addr, None)
 
 	if slot is None:
@@ -108,12 +144,12 @@ def onWebSocketClose(webServerDAT, client):
 
 	_free_slots.append(slot)
 	_free_slots.sort()
+	_slot_touch_count.pop(slot, None)
 
-	# Clear sensor_table row for this slot
+	# Reset sensor_table row in one call
 	t = op('sensor_table')
 	if t is not None:
-		for col in SENSOR_COLS[1:]:
-			t[slot, col] = 0
+		t.replaceRow(slot, [slot, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
 	# Remove touch_table rows for this slot
 	tt = op('touch_table')
@@ -130,8 +166,7 @@ def onWebSocketClose(webServerDAT, client):
 
 def onWebSocketReceiveText(webServerDAT, client, data):
 	global _free_slots
-	addr = str(client.address)
-	print(f'[WOB] RCV from {addr}: {data[:60]}')
+	addr = str(client)
 	slot = _client_slots.get(addr)
 	if slot is None:
 		# Module was reloaded while client was connected - auto-recover slot
@@ -148,37 +183,32 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 
 	try:
 		msg = json.loads(data)
-	except Exception as e:
-		print(f'[WOB] WARN: JSON parse error: {e}')
+	except Exception:
 		return
 
-	t = op('sensor_table')
-	if t is None:
-		print('[WOB] WARN: sensor_table not found')
-		return
+	msg_type = msg.get('type')
 
-	if msg.get('type') == 'hello':
-		print(f'[WOB] Hello received from slot {slot} - data channel OK')
-		return
+	if msg_type == 'sensor':
+		t = op('sensor_table')
+		if t is None:
+			return
+		g = msg.get
+		# Single replaceRow call instead of 11 individual cell writes
+		t.replaceRow(slot, [
+			slot, 1,
+			g('ax', 0), g('ay', 0), g('az', 0),
+			g('ga', 0), g('gb', 0), g('gg', 0),
+			g('oa', 0), g('ob', 0), g('og', 0),
+			g('lat', 0), g('lon', 0),
+			_slot_touch_count.get(slot, 0),
+		])
 
-	if msg.get('type') == 'sensor':
-		t[slot, 'ax'] = msg.get('ax', 0)
-		t[slot, 'ay'] = msg.get('ay', 0)
-		t[slot, 'az'] = msg.get('az', 0)
-		t[slot, 'ga'] = msg.get('ga', 0)
-		t[slot, 'gb'] = msg.get('gb', 0)
-		t[slot, 'gg'] = msg.get('gg', 0)
-		t[slot, 'oa'] = msg.get('oa', 0)
-		t[slot, 'ob'] = msg.get('ob', 0)
-		t[slot, 'og'] = msg.get('og', 0)
-		t[slot, 'lat'] = msg.get('lat', 0)
-		t[slot, 'lon'] = msg.get('lon', 0)
-
-	elif msg.get('type') == 'touch':
+	elif msg_type == 'touch':
 		count = msg.get('count', 0)
+		_slot_touch_count[slot] = count
+		t = op('sensor_table')
 		if t is not None:
 			t[slot, 'touch_count'] = count
-
 		tt = op('touch_table')
 		if tt is not None:
 			rows_to_delete = [
@@ -187,10 +217,9 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 			]
 			for r in reversed(rows_to_delete):
 				tt.deleteRow(r)
+			g = msg.get
 			for i in range(count):
-				tt.appendRow([
-					slot, i,
-					msg.get(f't{i}x', 0),
-					msg.get(f't{i}y', 0),
-					msg.get(f't{i}s', 0),
-				])
+				tt.appendRow([slot, i, g(f't{i}x', 0), g(f't{i}y', 0), g(f't{i}s', 0)])
+
+	elif msg_type == 'hello':
+		print(f'[WOB] Hello from slot {slot} - OK')
