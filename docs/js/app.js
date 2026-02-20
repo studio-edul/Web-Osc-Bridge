@@ -90,6 +90,14 @@
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
 
+    // Periodically ensure broadcast is running when conditions are met
+    setInterval(() => {
+      if (WSClient.isConnected() && SensorModule.isEnabled() && !broadcasting) {
+        addLog('Auto-starting broadcast (retry)', 'info');
+        startBroadcast();
+      }
+    }, 2000);
+
     const td = new URLSearchParams(window.location.search).get('td');
     if (td) {
       addLog('Auto-connect: ' + td, 'info');
@@ -190,9 +198,17 @@
       onStatusChange: (status) => {
         updateConnectionStatus(status);
         addLog('WS status: ' + status, status === 'connected' ? 'info' : status === 'error' ? 'error' : 'warn');
-        // Auto-start broadcast when connected and sensors are already enabled
-        if (status === 'connected' && SensorModule.isEnabled() && !broadcasting) {
-          startBroadcast();
+        if (status === 'connected') {
+          // Send hello to verify the data channel is working
+          WSClient.send({ type: 'hello' });
+          addLog('Hello sent to TD', 'info');
+          // Auto-start broadcast if sensors are already enabled
+          if (SensorModule.isEnabled() && !broadcasting) {
+            addLog('Auto-starting broadcast', 'info');
+            startBroadcast();
+          } else if (!SensorModule.isEnabled()) {
+            addLog('Sensors not enabled - tap Enable Sensors', 'warn');
+          }
         }
       },
       onErrorDetail: (msg) => {

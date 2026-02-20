@@ -157,6 +157,10 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		print('[WOB] WARN: sensor_table not found')
 		return
 
+	if msg.get('type') == 'hello':
+		print(f'[WOB] Hello received from slot {slot} - data channel OK')
+		return
+
 	if msg.get('type') == 'sensor':
 		t[slot, 'ax'] = msg.get('ax', 0)
 		t[slot, 'ay'] = msg.get('ay', 0)
