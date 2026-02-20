@@ -62,6 +62,13 @@ const WSClient = (() => {
 
     ws.onmessage = (event) => {
       console.log('[WS] From TD:', event.data);
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'ack') {
+          if (onStatusChange) onStatusChange('connected'); // re-confirm status
+          console.log('[WS] TD ack received, slot:', msg.slot);
+        }
+      } catch (e) { /* ignore non-JSON */ }
     };
 
     ws.onclose = (event) => {

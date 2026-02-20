@@ -11,10 +11,10 @@ const SensorModule = (() => {
   };
 
   const selected = {
-    motion: false,
-    orientation: false,
+    motion: true,
+    orientation: true,
     geolocation: false,
-    touch: false,
+    touch: true,
   };
 
   const data = {
