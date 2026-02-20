@@ -60,22 +60,22 @@ def onHTTPRequest(webServerDAT, request, response):
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WOB - Connected</title>
+  <title>WOB</title>
   <style>
-    body {{ font-family: sans-serif; text-align: center; padding: 60px 20px;
+    body {{ font-family: sans-serif; text-align: center; padding: 40px 20px;
            background: #111; color: #fff; }}
     h1 {{ color: #4caf50; font-size: 2em; margin-bottom: 12px; }}
-    p {{ color: #aaa; margin: 8px 0; font-size: 1.1em; }}
+    p {{ color: #aaa; margin: 8px 0; }}
+    a {{ color: #4caf50; font-size: 1.1em; word-break: break-all; }}
   </style>
   <script>
-    setTimeout(function() {{
-      window.location.href = '{redirect_url}';
-    }}, 1200);
+    window.location.href = '{redirect_url}';
   </script>
 </head>
 <body>
-  <h1>&#10003; Certificate accepted</h1>
-  <p>Redirecting to WOB app...</p>
+  <h1>&#10003; WOB</h1>
+  <p>Redirecting...</p>
+  <p><a href="{redirect_url}">Tap here if not redirected</a></p>
 </body>
 </html>'''
 	return response

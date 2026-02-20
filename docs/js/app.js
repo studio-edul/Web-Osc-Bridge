@@ -89,12 +89,18 @@
     renderSensorList();
     SensorModule.setDebugCallback((msg) => updateDebug(msg));
 
-    // ?td= 파라미터로 넘어온 경우 자동 연결
     const td = new URLSearchParams(window.location.search).get('td');
     if (td) {
+      addLog('Auto-connect: ' + td, 'info');
       els.tdAddress.value = td;
-      history.replaceState(null, '', window.location.pathname); // URL에서 파라미터 제거
+      history.replaceState(null, '', window.location.pathname);
       handleConnect();
+      // Auto-enable sensors on Android (no permission dialog needed)
+      if (!SensorModule.needsPermissionRequest()) {
+        handleEnableSensors();
+      }
+    } else {
+      addLog('No ?td= param - enter address manually', 'warn');
     }
   }
 
