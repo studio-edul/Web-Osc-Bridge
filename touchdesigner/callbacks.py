@@ -129,11 +129,21 @@ def onWebSocketClose(webServerDAT, client):
 
 
 def onWebSocketReceiveText(webServerDAT, client, data):
+	global _free_slots
 	addr = str(client.address)
 	slot = _client_slots.get(addr)
 	if slot is None:
-		print(f'[WOB] WARN: data from unknown addr={addr} | known={list(_client_slots.keys())}')
-		return
+		# Module was reloaded while client was connected - auto-recover slot
+		if _free_slots:
+			slot = _free_slots.pop(0)
+			_client_slots[addr] = slot
+			t2 = op('sensor_table')
+			if t2 is not None:
+				t2[slot, 'connected'] = 1
+			print(f'[WOB] Recovered slot {slot} for {addr} after module reload')
+		else:
+			print(f'[WOB] WARN: data from unknown addr={addr}, no free slots')
+			return
 
 	try:
 		msg = json.loads(data)
