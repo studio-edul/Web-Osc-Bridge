@@ -126,7 +126,9 @@
     els.btnFullscreenTouch.addEventListener('click', enterTouchPad);
     els.btnExitTouch.addEventListener('click', exitTouchPad);
     els.btnBroadcast.addEventListener('click', toggleBroadcast);
+    els.btnTrigger.addEventListener('pointerdown', () => els.btnTrigger.classList.add('triggered'));
     els.btnTrigger.addEventListener('pointerup', sendTrigger);
+    els.btnTrigger.addEventListener('pointercancel', () => els.btnTrigger.classList.remove('triggered'));
 
     setInterval(updatePacketRate, 1000);
   }
@@ -321,11 +323,10 @@
   }
 
   function sendTrigger() {
+    els.btnTrigger.classList.remove('triggered');
     if (!WSClient.isConnected()) return;
     WSClient.send({ type: 'trigger' });
     haptic(50);
-    els.btnTrigger.classList.add('triggered');
-    setTimeout(() => els.btnTrigger.classList.remove('triggered'), 150);
   }
 
   function handleTouchData(snapshot) {
