@@ -11,6 +11,7 @@
   let touchPadActive = false;
   let hapticEnabled = true;
   let devMode = true; // true = full UI, false = minimal/auto mode
+  let vizInitialized = false;
 
   const $ = (id) => document.getElementById(id);
   const els = {};
@@ -106,32 +107,23 @@
   function applyDevMode(on) {
     devMode = on;
     if (on) {
-      // Full access: show sensor panel, exit touch pad
+      // Full UI: show sensor panel, transition out of non-dev touch pad
       if (els.sensorPanel) els.sensorPanel.style.display = '';
       _removeDevOverlay();
-      if (touchPadActive) exitTouchPad();
-    } else {
-      // Minimal mode: hide sensor panel, auto-start
-      if (els.sensorPanel) els.sensorPanel.style.display = 'none';
-      _autoStartDevMode();
-    }
-  }
-
-  function _autoStartDevMode() {
-    _doAutoStart();
-  }
-
-  function _doAutoStart() {
-    if (!SensorModule.isEnabled()) {
-      SensorModule.startListening();
-      startVizLoop();
-      if (els.btnEnableSensors) {
-        els.btnEnableSensors.textContent = 'Deactivate Sensors';
-        els.btnEnableSensors.classList.add('btn-active');
+      if (touchPadActive) {
+        touchPadActive = false;
+        els.touchPad.classList.add('hidden');
+        els.btnExitTouch.classList.remove('hidden');
+        TouchModule.destroy();
       }
+      els.mainUI.classList.remove('hidden');
+      _initViz();
+    } else {
+      // Minimal mode: hide main UI entirely, go straight to touch pad
+      if (els.sensorPanel) els.sensorPanel.style.display = 'none';
+      els.mainUI.classList.add('hidden');
+      if (!touchPadActive) _showTouchPadDirectly();
     }
-    if (WSClient.isConnected() && !broadcasting) startBroadcast();
-    if (!touchPadActive) enterTouchPad();
   }
 
   function _removeDevOverlay() {
@@ -139,12 +131,52 @@
     if (el) el.remove();
   }
 
+  function _initViz() {
+    if (vizInitialized) return;
+    vizInitialized = true;
+    Visualization.init(els.vizCanvas);
+    startVizTouch();
+  }
+
+  /**
+   * Show touch pad directly without main UI (dev_mode=0).
+   * Handles iOS sensor permission via first-touch gesture.
+   */
+  function _showTouchPadDirectly() {
+    touchPadActive = true;
+    els.touchPad.classList.remove('hidden');
+    els.btnExitTouch.classList.add('hidden'); // no exit in minimal mode
+    resizeTouchCanvas();
+
+    const startSensorsAndBroadcast = () => {
+      if (!SensorModule.isEnabled()) SensorModule.startListening();
+      if (WSClient.isConnected() && !broadcasting) startBroadcast();
+    };
+
+    if (SensorModule.needsPermissionRequest()) {
+      // iOS: DeviceMotionEvent.requestPermission() MUST be called from a user gesture.
+      // Wait for first touch on the canvas, then request, then start sensors.
+      els.touchCanvas.addEventListener('pointerdown', async function onFirstTouch() {
+        await SensorModule.requestPermissions();
+        startSensorsAndBroadcast();
+      }, { once: true });
+    } else {
+      startSensorsAndBroadcast();
+    }
+
+    TouchModule.init(els.touchCanvas, (snapshot) => {
+      Visualization.drawTouches(els.touchCanvas, snapshot.touches, false);
+      handleTouchData(snapshot);
+    });
+  }
+
   function init() {
     cacheDom();
     // Apply cached dev mode instantly to prevent flash of wrong UI
     const _cached = localStorage.getItem('wob-dev-mode');
-    if (_cached !== null && !parseInt(_cached) && els.sensorPanel) {
-      els.sensorPanel.style.display = 'none';
+    if (_cached !== null) {
+      devMode = !!parseInt(_cached);
+      if (!devMode && els.sensorPanel) els.sensorPanel.style.display = 'none';
     }
     loadSettings();
     bindEvents();
@@ -165,7 +197,8 @@
       els.tdAddress.value = td;
       history.replaceState(null, '', window.location.pathname);
       handleConnect();
-      if (!SensorModule.needsPermissionRequest()) {
+      // In dev_mode=1 non-iOS: auto-enable sensors. In dev_mode=0: _showTouchPadDirectly handles it.
+      if (devMode && !SensorModule.needsPermissionRequest()) {
         handleEnableSensors();
       }
     } else {
@@ -240,7 +273,7 @@
           if (SensorModule.isEnabled() && !broadcasting) {
             addLog('Auto-starting broadcast', 'info');
             startBroadcast();
-          } else if (!SensorModule.isEnabled()) {
+          } else if (!SensorModule.isEnabled() && devMode) {
             addLog('Sensors not enabled - tap Enable Sensors', 'warn');
           }
         }
@@ -253,12 +286,17 @@
     });
 
     els.modal.classList.remove('active');
-    els.mainUI.classList.remove('hidden');
-
-    Visualization.init(els.vizCanvas);
     resizeTouchCanvas();
     window.addEventListener('resize', resizeTouchCanvas);
-    startVizTouch();
+
+    if (devMode) {
+      // Full UI: show main interface + initialize visualization
+      els.mainUI.classList.remove('hidden');
+      _initViz();
+    } else {
+      // Minimal mode: skip main UI, go straight to touch pad
+      _showTouchPadDirectly();
+    }
 
     requestWakeLock(); // default on; TD can override via config
   }
@@ -269,6 +307,10 @@
     SensorModule.stopListening();
     WSClient.disconnect();
     releaseWakeLock();
+    touchPadActive = false;
+    vizInitialized = false;
+    els.touchPad.classList.add('hidden');
+    els.btnExitTouch.classList.remove('hidden');
     els.mainUI.classList.add('hidden');
     els.modal.classList.add('active');
   }
@@ -403,6 +445,7 @@
     touchPadActive = true;
     stopVizTouch();
     els.touchPad.classList.remove('hidden');
+    els.btnExitTouch.classList.remove('hidden'); // always visible in dev_mode=1
     resizeTouchCanvas();
 
     TouchModule.init(els.touchCanvas, (snapshot) => {

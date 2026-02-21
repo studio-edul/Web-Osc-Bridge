@@ -7,6 +7,7 @@ const Visualization = (() => {
   let canvas = null;
   let ctx = null;
   let visible = true;
+  let _resizeObserver = null;
 
   const HISTORY_LENGTH = 120; // ~2s at 60fps
   const history = {};
@@ -55,18 +56,27 @@ const Visualization = (() => {
     canvas = canvasElement;
     ctx = canvas.getContext('2d');
     resize();
-    window.addEventListener('resize', resize);
+    // ResizeObserver fires after flex layout is computed — avoids 0-height at init time.
+    if (typeof ResizeObserver !== 'undefined') {
+      if (_resizeObserver) _resizeObserver.disconnect();
+      _resizeObserver = new ResizeObserver(() => resize());
+      _resizeObserver.observe(canvas.parentElement);
+    } else {
+      window.addEventListener('resize', resize);
+    }
   }
 
   function resize() {
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.parentElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return; // not laid out yet
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     canvas.style.width = rect.width + 'px';
     canvas.style.height = rect.height + 'px';
-    ctx.scale(dpr, dpr);
+    // setTransform resets + scales in one step, preventing accumulation across calls
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   function update(sensorData) {
@@ -88,16 +98,27 @@ const Visualization = (() => {
   function render(activeGroups) {
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.width / dpr;
-    const h = canvas.height / dpr;
+    let h = canvas.height / dpr;
+
+    if (activeGroups.length === 0) { ctx.clearRect(0, 0, w, h); return; }
+
+    // Ensure each group gets at least MIN_ROW_H pixels; extend canvas if needed
+    const MIN_ROW_H = 55;
+    const rowH = Math.max(Math.floor(h / activeGroups.length), MIN_ROW_H);
+    const neededH = rowH * activeGroups.length;
+    if (neededH > h) {
+      canvas.height = neededH * dpr;
+      canvas.style.height = neededH + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      h = neededH;
+    }
 
     ctx.clearRect(0, 0, w, h);
-    if (activeGroups.length === 0) return;
 
     const LABEL_W = 52;  // left label column
     const VALUE_W = 80;  // right value column
     const graphLeft = LABEL_W;
     const graphWidth = w - LABEL_W - VALUE_W;
-    const rowH = Math.floor(h / activeGroups.length);
 
     activeGroups.forEach((g, gi) => {
       const rowTop = gi * rowH;
@@ -245,6 +266,7 @@ const Visualization = (() => {
   function isVisible() { return visible; }
 
   function destroy() {
+    if (_resizeObserver) { _resizeObserver.disconnect(); _resizeObserver = null; }
     window.removeEventListener('resize', resize);
   }
 

@@ -476,7 +476,9 @@ input[type="checkbox"] {
   flex: 1;
   min-height: 0;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 #viz-canvas {

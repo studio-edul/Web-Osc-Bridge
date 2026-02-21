@@ -73,11 +73,12 @@
       <button id="btn-broadcast" class="btn btn-broadcast">Start Broadcast</button>
     </div>
 
-    <!-- Fullscreen Touch Pad (togglable) -->
-    <div id="touch-pad" class="hidden">
-      <canvas id="touch-canvas"></canvas>
-      <button id="btn-exit-touch" class="btn btn-small btn-exit-touch">Exit Touch Pad</button>
-    </div>
+  </div>
+
+  <!-- Fullscreen Touch Pad (shown directly in dev_mode=0, or toggled in dev_mode=1) -->
+  <div id="touch-pad" class="hidden">
+    <canvas id="touch-canvas"></canvas>
+    <button id="btn-exit-touch" class="btn btn-small btn-exit-touch">Exit Touch Pad</button>
   </div>
 
   <script src="js/websocket.js"></script>
