@@ -46,6 +46,9 @@
     els.touchCanvas = $('touch-canvas');
     els.btnExitTouch = $('btn-exit-touch');
     els.debugInfo = $('debug-info');
+    els.userStartOverlay = $('user-start-overlay');
+    els.btnUserStart = $('btn-user-start');
+    els.wobLoading = $('wob-loading');
   }
 
   function loadSettings() {
@@ -106,10 +109,14 @@
 
   function applyDevMode(on) {
     devMode = on;
+    // Config arrived — hide any loading screen that was blocking the UI
+    els.wobLoading.classList.add('hidden');
+
     if (on) {
       // Full UI: show sensor panel, transition out of non-dev touch pad
       if (els.sensorPanel) els.sensorPanel.style.display = '';
       _removeDevOverlay();
+      els.userStartOverlay.classList.add('hidden'); // clean up if switching from user mode
       if (touchPadActive) {
         touchPadActive = false;
         els.touchPad.classList.add('hidden');
@@ -154,9 +161,11 @@
     };
 
     if (SensorModule.needsPermissionRequest()) {
-      // iOS: DeviceMotionEvent.requestPermission() MUST be called from a user gesture.
-      // Wait for first touch on the canvas, then request, then start sensors.
-      els.touchCanvas.addEventListener('pointerdown', async function onFirstTouch() {
+      // iOS: DeviceMotionEvent.requestPermission() must be in a direct button-click handler.
+      // Show a dedicated START button — this is the most reliable iOS gesture trigger.
+      els.userStartOverlay.classList.remove('hidden');
+      els.btnUserStart.addEventListener('click', async function() {
+        els.userStartOverlay.classList.add('hidden');
         await SensorModule.requestPermissions();
         startSensorsAndBroadcast();
       }, { once: true });
@@ -196,7 +205,7 @@
       addLog('Auto-connect: ' + td, 'info');
       els.tdAddress.value = td;
       history.replaceState(null, '', window.location.pathname);
-      handleConnect();
+      handleConnect(true); // autoConnect=true → use loading screen on first QR-scan
       // In dev_mode=1 non-iOS: auto-enable sensors. In dev_mode=0: _showTouchPadDirectly handles it.
       if (devMode && !SensorModule.needsPermissionRequest()) {
         handleEnableSensors();
@@ -252,7 +261,7 @@
     });
   }
 
-  function handleConnect() {
+  function handleConnect(autoConnect = false) {
     const addr = els.tdAddress.value.trim();
     if (!addr) {
       alert('TouchDesigner 주소를 입력하세요.');
@@ -277,6 +286,12 @@
             addLog('Sensors not enabled - tap Enable Sensors', 'warn');
           }
         }
+        // If connection fails while loading screen is up, fall back to modal
+        if ((status === 'error' || status === 'rejected' || status === 'disconnected') &&
+            !els.wobLoading.classList.contains('hidden')) {
+          els.wobLoading.classList.add('hidden');
+          els.modal.classList.add('active');
+        }
       },
       onErrorDetail: (msg) => {
         updateConnectionError(msg);
@@ -289,7 +304,12 @@
     resizeTouchCanvas();
     window.addEventListener('resize', resizeTouchCanvas);
 
-    if (devMode) {
+    // On first QR-scan (no cached devMode), we don't know user vs dev mode yet.
+    // Show a loading screen so config can arrive before any UI is shown — prevents flash.
+    const hasCachedMode = localStorage.getItem('wob-dev-mode') !== null;
+    if (autoConnect && !hasCachedMode) {
+      els.wobLoading.classList.remove('hidden'); // applyDevMode() will hide it
+    } else if (devMode) {
       // Full UI: show main interface + initialize visualization
       els.mainUI.classList.remove('hidden');
       _initViz();
@@ -311,6 +331,8 @@
     vizInitialized = false;
     els.touchPad.classList.add('hidden');
     els.btnExitTouch.classList.remove('hidden');
+    els.userStartOverlay.classList.add('hidden');
+    els.wobLoading.classList.add('hidden');
     els.mainUI.classList.add('hidden');
     els.modal.classList.add('active');
   }

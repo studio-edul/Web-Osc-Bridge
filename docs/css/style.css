@@ -543,6 +543,32 @@ input[type="checkbox"] {
   backdrop-filter: blur(8px);
 }
 
+/* User mode START button overlay (iOS sensor permission trigger) */
+#user-start-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(0, 0, 0, 0.88);
+}
+
+#user-start-overlay .btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.3rem;
+  padding: 18px 40px;
+  white-space: nowrap;
+}
+
+/* Loading screen: blocks flash of wrong UI while waiting for server config */
+#wob-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: var(--bg);
+}
+
 /* ===== Scrollbar ===== */
 ::-webkit-scrollbar {
   width: 4px;

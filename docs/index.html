@@ -81,6 +81,14 @@
     <button id="btn-exit-touch" class="btn btn-small btn-exit-touch">Exit Touch Pad</button>
   </div>
 
+  <!-- User mode (iOS): tap to trigger sensor permission request -->
+  <div id="user-start-overlay" class="hidden">
+    <button id="btn-user-start" class="btn btn-primary">TAP TO START</button>
+  </div>
+
+  <!-- Loading screen: shown while waiting for config on first QR-scan connection -->
+  <div id="wob-loading" class="hidden"></div>
+
   <script src="js/websocket.js"></script>
   <script src="js/sensors.js"></script>
   <script src="js/touch.js"></script>
