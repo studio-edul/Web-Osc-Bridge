@@ -89,15 +89,12 @@
     if (cfg.haptic != null) {
       hapticEnabled = !!parseInt(cfg.haptic);
     }
-    if (cfg.sensors != null) {
-      const ALL_KEYS = ['motion', 'orientation', 'geolocation', 'touch'];
-      const active = cfg.sensors === 'all'
-        ? ALL_KEYS
-        : cfg.sensors.split(',').map(s => s.trim()).filter(Boolean);
-      ALL_KEYS.forEach(key => SensorModule.setSensorSelected(key, active.includes(key)));
-      renderSensorList();
-      addLog(`Config: sensors=${cfg.sensors}`, 'info');
-    }
+    let sensorChanged = false;
+    ['motion', 'orientation', 'geolocation', 'touch'].forEach(key => {
+      const v = cfg[`sensor_${key}`];
+      if (v != null) { SensorModule.setSensorSelected(key, !!parseInt(v)); sensorChanged = true; }
+    });
+    if (sensorChanged) renderSensorList();
     if (cfg.dev_mode != null) {
       applyDevMode(!!parseInt(cfg.dev_mode));
     }

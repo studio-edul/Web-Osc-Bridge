@@ -98,12 +98,15 @@ def broadcast_config(webServerDAT):
 	"""
 	cfg = _read_config()
 	msg = json.dumps({
-		'type':        'config',
-		'sample_rate': int(cfg.get('sample_rate', 30)),
-		'wake_lock':   int(cfg.get('wake_lock', 1)),
-		'haptic':      int(cfg.get('haptic', 1)),
-		'sensors':     cfg.get('sensors', 'motion,orientation,touch'),
-		'dev_mode':    int(cfg.get('dev_mode', 1)),
+		'type':               'config',
+		'sample_rate':        int(cfg.get('sample_rate', 30)),
+		'wake_lock':          int(cfg.get('wake_lock', 1)),
+		'haptic':             int(cfg.get('haptic', 1)),
+		'sensor_motion':      int(cfg.get('sensor_motion', 1)),
+		'sensor_orientation': int(cfg.get('sensor_orientation', 1)),
+		'sensor_geolocation': int(cfg.get('sensor_geolocation', 0)),
+		'sensor_touch':       int(cfg.get('sensor_touch', 1)),
+		'dev_mode':           int(cfg.get('dev_mode', 1)),
 	})
 	for addr in list(_slots().keys()):
 		try:
@@ -179,12 +182,15 @@ def onWebSocketOpen(webServerDAT, client):
 		# Push current config to the newly connected client
 		cfg = _read_config()
 		webServerDAT.webSocketSendText(client, json.dumps({
-			'type':        'config',
-			'sample_rate': int(cfg.get('sample_rate', 30)),
-			'wake_lock':   int(cfg.get('wake_lock', 1)),
-			'haptic':      int(cfg.get('haptic', 1)),
-			'sensors':     cfg.get('sensors', 'motion,orientation,touch'),
-			'dev_mode':    int(cfg.get('dev_mode', 1)),
+			'type':               'config',
+			'sample_rate':        int(cfg.get('sample_rate', 30)),
+			'wake_lock':          int(cfg.get('wake_lock', 1)),
+			'haptic':             int(cfg.get('haptic', 1)),
+			'sensor_motion':      int(cfg.get('sensor_motion', 1)),
+			'sensor_orientation': int(cfg.get('sensor_orientation', 1)),
+			'sensor_geolocation': int(cfg.get('sensor_geolocation', 0)),
+			'sensor_touch':       int(cfg.get('sensor_touch', 1)),
+			'dev_mode':           int(cfg.get('dev_mode', 1)),
 		}))
 	except Exception as e:
 		print(f'[WOB] ERROR in onWebSocketOpen: {e}')
