@@ -169,9 +169,11 @@ const Visualization = (() => {
   }
 
   /**
-   * Draw touch points on a separate canvas
+   * Draw touch points on a separate canvas.
+   * showFull=true (dev mode): grid + crosshairs + coordinates + circles
+   * showFull=false (performance mode): circles only
    */
-  function drawTouches(touchCanvas, touches) {
+  function drawTouches(touchCanvas, touches, showFull) {
     const tCtx = touchCanvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const w = touchCanvas.width / dpr;
@@ -180,6 +182,20 @@ const Visualization = (() => {
     tCtx.clearRect(0, 0, w * dpr, h * dpr);
     tCtx.save();
     tCtx.scale(dpr, dpr);
+
+    // Grid (dev mode only)
+    if (showFull) {
+      tCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+      tCtx.lineWidth = 1;
+      for (let i = 0; i <= 10; i++) {
+        const gx = (i / 10) * w;
+        const gy = (i / 10) * h;
+        tCtx.beginPath();
+        tCtx.moveTo(gx, 0); tCtx.lineTo(gx, h);
+        tCtx.moveTo(0, gy); tCtx.lineTo(w, gy);
+        tCtx.stroke();
+      }
+    }
 
     const colors = ['#ff4444', '#44ff44', '#4488ff', '#ffaa44', '#ff44aa',
                      '#44ffaa', '#aa44ff', '#ffff44', '#44ffff', '#ff8888'];
@@ -201,6 +217,21 @@ const Visualization = (() => {
       tCtx.beginPath();
       tCtx.arc(px, py, 8, 0, Math.PI * 2);
       tCtx.fill();
+
+      // Crosshair + label (dev mode only)
+      if (showFull) {
+        tCtx.strokeStyle = `${color}66`;
+        tCtx.lineWidth = 1;
+        tCtx.beginPath();
+        tCtx.moveTo(px, 0); tCtx.lineTo(px, h);
+        tCtx.moveTo(0, py); tCtx.lineTo(w, py);
+        tCtx.stroke();
+
+        tCtx.fillStyle = color;
+        tCtx.font = '12px monospace';
+        tCtx.textAlign = 'left';
+        tCtx.fillText(`#${touch.id} (${touch.x.toFixed(2)}, ${touch.y.toFixed(2)})`, px + 36, py - 4);
+      }
     });
 
     tCtx.restore();

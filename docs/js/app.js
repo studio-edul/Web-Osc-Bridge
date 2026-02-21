@@ -406,7 +406,7 @@
     resizeTouchCanvas();
 
     TouchModule.init(els.touchCanvas, (snapshot) => {
-      Visualization.drawTouches(els.touchCanvas, snapshot.touches);
+      Visualization.drawTouches(els.touchCanvas, snapshot.touches, devMode);
       handleTouchData(snapshot);
     });
     haptic();
