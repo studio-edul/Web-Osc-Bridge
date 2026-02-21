@@ -181,18 +181,6 @@ const Visualization = (() => {
     tCtx.save();
     tCtx.scale(dpr, dpr);
 
-    // Grid
-    tCtx.strokeStyle = 'rgba(255,255,255,0.05)';
-    tCtx.lineWidth = 1;
-    for (let i = 0; i <= 10; i++) {
-      const gx = (i / 10) * w;
-      const gy = (i / 10) * h;
-      tCtx.beginPath();
-      tCtx.moveTo(gx, 0); tCtx.lineTo(gx, h);
-      tCtx.moveTo(0, gy); tCtx.lineTo(w, gy);
-      tCtx.stroke();
-    }
-
     const colors = ['#ff4444', '#44ff44', '#4488ff', '#ffaa44', '#ff44aa',
                      '#44ffaa', '#aa44ff', '#ffff44', '#44ffff', '#ff8888'];
 
@@ -201,28 +189,18 @@ const Visualization = (() => {
       const py = touch.y * h;
       const color = colors[idx % colors.length];
 
+      // Outer ring
       tCtx.strokeStyle = color;
       tCtx.lineWidth = 2;
       tCtx.beginPath();
       tCtx.arc(px, py, 30, 0, Math.PI * 2);
       tCtx.stroke();
 
+      // Inner dot
       tCtx.fillStyle = color;
       tCtx.beginPath();
       tCtx.arc(px, py, 8, 0, Math.PI * 2);
       tCtx.fill();
-
-      tCtx.strokeStyle = `${color}66`;
-      tCtx.lineWidth = 1;
-      tCtx.beginPath();
-      tCtx.moveTo(px, 0); tCtx.lineTo(px, h);
-      tCtx.moveTo(0, py); tCtx.lineTo(w, py);
-      tCtx.stroke();
-
-      tCtx.fillStyle = color;
-      tCtx.font = '12px monospace';
-      tCtx.textAlign = 'left';
-      tCtx.fillText(`#${touch.id} (${touch.x.toFixed(2)}, ${touch.y.toFixed(2)})`, px + 36, py - 4);
     });
 
     tCtx.restore();

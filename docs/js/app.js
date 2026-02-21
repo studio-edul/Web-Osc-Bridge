@@ -96,6 +96,7 @@
     });
     if (sensorChanged) renderSensorList();
     if (cfg.dev_mode != null) {
+      localStorage.setItem('wob-dev-mode', String(cfg.dev_mode));
       applyDevMode(!!parseInt(cfg.dev_mode));
     }
   }
@@ -117,11 +118,6 @@
   }
 
   function _autoStartDevMode() {
-    // iOS requires user tap to grant motion permissions
-    if (SensorModule.needsPermissionRequest() && !SensorModule.isEnabled()) {
-      _showDevModeStartOverlay();
-      return;
-    }
     _doAutoStart();
   }
 
@@ -138,22 +134,6 @@
     if (!touchPadActive) enterTouchPad();
   }
 
-  function _showDevModeStartOverlay() {
-    if (document.getElementById('devmode-overlay')) return;
-    const overlay = document.createElement('div');
-    overlay.id = 'devmode-overlay';
-    overlay.innerHTML = `<div class="devmode-start-box">
-      <p>Tap to start</p>
-      <button id="btn-devmode-start" class="btn btn-primary">Start</button>
-    </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector('#btn-devmode-start').addEventListener('pointerup', async () => {
-      overlay.remove();
-      await SensorModule.requestPermissions();
-      _doAutoStart();
-    });
-  }
-
   function _removeDevOverlay() {
     const el = document.getElementById('devmode-overlay');
     if (el) el.remove();
@@ -161,6 +141,11 @@
 
   function init() {
     cacheDom();
+    // Apply cached dev mode instantly to prevent flash of wrong UI
+    const _cached = localStorage.getItem('wob-dev-mode');
+    if (_cached !== null && !parseInt(_cached) && els.sensorPanel) {
+      els.sensorPanel.style.display = 'none';
+    }
     loadSettings();
     bindEvents();
     renderSensorList();
