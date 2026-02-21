@@ -92,16 +92,18 @@ def init_tables():
 
 def broadcast_config(webServerDAT):
 	"""Push updated config to all connected clients.
-	Call from TD script after editing config_table:
+	Call from TD script after editing wob_config:
 	    op('web_server_dat').module.broadcast_config(op('web_server_dat'))
-	config_table keys: sample_rate, wake_lock, haptic
+	wob_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode
 	"""
 	cfg = _read_config()
 	msg = json.dumps({
-		'type': 'config',
+		'type':        'config',
 		'sample_rate': int(cfg.get('sample_rate', 30)),
 		'wake_lock':   int(cfg.get('wake_lock', 1)),
 		'haptic':      int(cfg.get('haptic', 1)),
+		'sensors':     cfg.get('sensors', 'motion,orientation,touch'),
+		'dev_mode':    int(cfg.get('dev_mode', 1)),
 	})
 	for addr in list(_slots().keys()):
 		try:
@@ -177,10 +179,12 @@ def onWebSocketOpen(webServerDAT, client):
 		# Push current config to the newly connected client
 		cfg = _read_config()
 		webServerDAT.webSocketSendText(client, json.dumps({
-			'type': 'config',
+			'type':        'config',
 			'sample_rate': int(cfg.get('sample_rate', 30)),
 			'wake_lock':   int(cfg.get('wake_lock', 1)),
 			'haptic':      int(cfg.get('haptic', 1)),
+			'sensors':     cfg.get('sensors', 'motion,orientation,touch'),
+			'dev_mode':    int(cfg.get('dev_mode', 1)),
 		}))
 	except Exception as e:
 		print(f'[WOB] ERROR in onWebSocketOpen: {e}')

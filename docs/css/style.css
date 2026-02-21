@@ -1,6 +1,29 @@
 /* WOB - Web OSC Bridge Styles */
 /* Dark theme, mobile-first, touch-friendly */
 
+/* ===== Dev Mode Start Overlay (iOS permission tap) ===== */
+#devmode-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 600;
+  background: var(--bg);
+}
+
+.devmode-start-box {
+  text-align: center;
+  width: 80%;
+  max-width: 280px;
+}
+
+.devmode-start-box p {
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
 /* ===== Server-full Rejection Overlay ===== */
 #rejected-overlay {
   position: fixed;

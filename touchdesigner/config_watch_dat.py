@@ -33,6 +33,8 @@ def _broadcast():
 		'sample_rate': int(cfg.get('sample_rate', 30)),
 		'wake_lock':   int(cfg.get('wake_lock', 1)),
 		'haptic':      int(cfg.get('haptic', 1)),
+		'sensors':     cfg.get('sensors', 'motion,orientation,touch'),
+		'dev_mode':    int(cfg.get('dev_mode', 1)),
 	})
 
 	# Use persistent client slots (stored by callbacks.py)

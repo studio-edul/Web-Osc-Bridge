@@ -10,6 +10,7 @@
   let wakeLock = null;
   let touchPadActive = false;
   let hapticEnabled = true;
+  let devMode = true; // true = full UI, false = minimal/auto mode
 
   const $ = (id) => document.getElementById(id);
   const els = {};
@@ -31,6 +32,7 @@
     els.connectionLabel = $('connection-label');
     els.connectionError = $('connection-error');
     els.packetRate = $('packet-rate');
+    els.sensorPanel = $('sensor-panel');
     els.btnFullscreenTouch = $('btn-fullscreen-touch');
     els.sensorList = $('sensor-list');
     els.btnEnableSensors = $('btn-enable-sensors');
@@ -69,7 +71,7 @@
 
   /**
    * Apply config pushed from TD via {type:'config'} message.
-   * config_table keys: sample_rate, wake_lock, haptic
+   * wob_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode
    */
   function applyConfig(cfg) {
     if (cfg.sample_rate != null) {
@@ -83,12 +85,81 @@
     if (cfg.wake_lock != null) {
       if (parseInt(cfg.wake_lock)) requestWakeLock();
       else releaseWakeLock();
-      addLog(`Config: wake_lock=${cfg.wake_lock}`, 'info');
     }
     if (cfg.haptic != null) {
       hapticEnabled = !!parseInt(cfg.haptic);
-      addLog(`Config: haptic=${hapticEnabled}`, 'info');
     }
+    if (cfg.sensors != null) {
+      const ALL_KEYS = ['motion', 'orientation', 'geolocation', 'touch'];
+      const active = cfg.sensors === 'all'
+        ? ALL_KEYS
+        : cfg.sensors.split(',').map(s => s.trim()).filter(Boolean);
+      ALL_KEYS.forEach(key => SensorModule.setSensorSelected(key, active.includes(key)));
+      renderSensorList();
+      addLog(`Config: sensors=${cfg.sensors}`, 'info');
+    }
+    if (cfg.dev_mode != null) {
+      applyDevMode(!!parseInt(cfg.dev_mode));
+    }
+  }
+
+  // ── Dev Mode ─────────────────────────────────────────────────────────────
+
+  function applyDevMode(on) {
+    devMode = on;
+    if (on) {
+      // Full access: show sensor panel, exit touch pad
+      if (els.sensorPanel) els.sensorPanel.style.display = '';
+      _removeDevOverlay();
+      if (touchPadActive) exitTouchPad();
+    } else {
+      // Minimal mode: hide sensor panel, auto-start
+      if (els.sensorPanel) els.sensorPanel.style.display = 'none';
+      _autoStartDevMode();
+    }
+  }
+
+  function _autoStartDevMode() {
+    // iOS requires user tap to grant motion permissions
+    if (SensorModule.needsPermissionRequest() && !SensorModule.isEnabled()) {
+      _showDevModeStartOverlay();
+      return;
+    }
+    _doAutoStart();
+  }
+
+  function _doAutoStart() {
+    if (!SensorModule.isEnabled()) {
+      SensorModule.startListening();
+      startVizLoop();
+      if (els.btnEnableSensors) {
+        els.btnEnableSensors.textContent = 'Deactivate Sensors';
+        els.btnEnableSensors.classList.add('btn-active');
+      }
+    }
+    if (WSClient.isConnected() && !broadcasting) startBroadcast();
+    if (!touchPadActive) enterTouchPad();
+  }
+
+  function _showDevModeStartOverlay() {
+    if (document.getElementById('devmode-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'devmode-overlay';
+    overlay.innerHTML = `<div class="devmode-start-box">
+      <p>Tap to start</p>
+      <button id="btn-devmode-start" class="btn btn-primary">Start</button>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#btn-devmode-start').addEventListener('pointerup', async () => {
+      overlay.remove();
+      await SensorModule.requestPermissions();
+      _doAutoStart();
+    });
+  }
+
+  function _removeDevOverlay() {
+    const el = document.getElementById('devmode-overlay');
+    if (el) el.remove();
   }
 
   function init() {
