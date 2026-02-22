@@ -1,7 +1,6 @@
 import socket
 import os
 import subprocess
-import sys
 
 def get_local_ip():
 	try:
@@ -13,19 +12,6 @@ def get_local_ip():
 	except Exception as e:
 		print(f'[WOB] Failed to detect IP: {e}')
 		return '127.0.0.1'
-
-def _pip_install(package):
-	"""Install a pip package into TD's Python environment (silent, no window)."""
-	try:
-		subprocess.check_call(
-			[sys.executable, '-m', 'pip', 'install', '--quiet', package],
-			creationflags=subprocess.CREATE_NO_WINDOW
-		)
-		print(f'[WOB] pip install {package} OK')
-		return True
-	except Exception as e:
-		print(f'[WOB] pip install {package} failed: {e}')
-		return False
 
 SENSOR_COLS = [
 	'slot', 'connected',
@@ -64,34 +50,24 @@ def onStart():
 def generate():
 	print('[WOB] generate() start')
 
-	# 1. Ensure qrcode is installed, then import
+	# 1. Import qrcode
 	try:
 		import qrcode
+		print('[WOB] qrcode import OK')
 	except ImportError:
-		print('[WOB] qrcode not found — installing...')
-		if not _pip_install('qrcode[pil]'):
-			print('[WOB] qrcode install failed. Run manually: pip install "qrcode[pil]"')
-			return
-		import qrcode
-	print('[WOB] qrcode import OK')
+		print('[WOB] qrcode not installed. Run op("wob_setup").module.install() first.')
+		return
 
-	# 2. Ensure pycloudflared is installed, then start tunnel
+	# 2. Start Cloudflare tunnel
 	url = None
 	try:
-		try:
-			from pycloudflared import try_cloudflare
-		except ImportError:
-			print('[WOB] pycloudflared not found — installing...')
-			if not _pip_install('pycloudflared'):
-				print('[WOB] pycloudflared install failed — falling back to local HTTPS')
-				raise RuntimeError('install failed')
-			from pycloudflared import try_cloudflare
-
-		print('[WOB] Starting cloudflare tunnel... (no signup required)')
+		from pycloudflared import try_cloudflare
+		print('[WOB] Starting Cloudflare tunnel... (no signup required)')
 		result = try_cloudflare(port=9980)
 		url = result.url  # e.g. "https://xxxx.trycloudflare.com"
 		print(f'[WOB] Cloudflare URL: {url}')
-
+	except ImportError:
+		print('[WOB] pycloudflared not installed. Run op("wob_setup").module.install() first.')
 	except Exception as e:
 		print(f'[WOB] Cloudflare tunnel failed: {e} — falling back to local HTTPS')
 
