@@ -12,6 +12,8 @@
   let hapticEnabled = true;
   let devMode = true; // true = full UI, false = minimal/auto mode
   let vizInitialized = false;
+  let cameraEnabled = false; // config: auto-enable camera on connect
+  let micEnabled = false;    // config: auto-enable mic on connect
 
   const $ = (id) => document.getElementById(id);
   const els = {};
@@ -49,6 +51,8 @@
     els.userStartOverlay = $('user-start-overlay');
     els.btnUserStart = $('btn-user-start');
     els.wobLoading = $('wob-loading');
+    els.btnCamera = $('btn-camera');
+    els.btnMic = $('btn-mic');
   }
 
   function loadSettings() {
@@ -102,6 +106,14 @@
     if (cfg.dev_mode != null) {
       localStorage.setItem('wob-dev-mode', String(cfg.dev_mode));
       applyDevMode(!!parseInt(cfg.dev_mode));
+    }
+    if (cfg.camera != null) {
+      cameraEnabled = !!parseInt(cfg.camera);
+      if (cameraEnabled && !WebRTCModule.isCameraActive()) _startWebRTC();
+    }
+    if (cfg.microphone != null) {
+      micEnabled = !!parseInt(cfg.microphone);
+      if (micEnabled && !WebRTCModule.isMicActive()) _startWebRTC();
     }
   }
 
@@ -224,6 +236,22 @@
     els.btnTrigger.addEventListener('pointerdown', () => els.btnTrigger.classList.add('triggered'));
     els.btnTrigger.addEventListener('pointerup', sendTrigger);
     els.btnTrigger.addEventListener('pointercancel', () => els.btnTrigger.classList.remove('triggered'));
+    els.btnCamera.addEventListener('click', handleCameraToggle);
+    els.btnMic.addEventListener('click', handleMicToggle);
+
+    // WebRTC state changes → update button styles
+    WebRTCModule.onStateChange((state) => {
+      const connected = state === 'connected';
+      if (els.btnCamera) {
+        els.btnCamera.classList.toggle('rtc-connected', connected && WebRTCModule.isCameraActive());
+        els.btnCamera.classList.toggle('btn-active', WebRTCModule.isCameraActive() && !connected);
+      }
+      if (els.btnMic) {
+        els.btnMic.classList.toggle('rtc-connected', connected && WebRTCModule.isMicActive());
+        els.btnMic.classList.toggle('btn-active', WebRTCModule.isMicActive() && !connected);
+      }
+      addLog('WebRTC: ' + state, state === 'connected' ? 'info' : state === 'failed' ? 'error' : 'warn');
+    });
 
     setInterval(updatePacketRate, 1000);
   }
@@ -298,6 +326,10 @@
         if (msg) addLog(msg, 'error');
       },
       onConfig: (cfg) => applyConfig(cfg),
+      onWebRTCSignal: (msg) => {
+        if (msg.type === 'webrtc_answer') WebRTCModule.handleAnswer(msg.sdp);
+        else if (msg.type === 'webrtc_ice') WebRTCModule.handleIce(msg);
+      },
     });
 
     els.modal.classList.remove('active');
@@ -606,6 +638,39 @@
   function haptic(duration = 30) {
     if (hapticEnabled && navigator.vibrate) {
       navigator.vibrate(duration);
+    }
+  }
+
+  // ── WebRTC ──────────────────────────────────────────────────────────────
+
+  async function _startWebRTC() {
+    if (!WSClient.isConnected()) return;
+    await WebRTCModule.start({ camera: cameraEnabled, mic: micEnabled });
+  }
+
+  async function handleCameraToggle() {
+    haptic();
+    if (WebRTCModule.isCameraActive()) {
+      await WebRTCModule.stop();
+      cameraEnabled = false;
+      els.btnCamera.classList.remove('btn-active', 'rtc-connected');
+    } else {
+      cameraEnabled = true;
+      els.btnCamera.classList.add('btn-active');
+      await WebRTCModule.start({ camera: true, mic: micEnabled });
+    }
+  }
+
+  async function handleMicToggle() {
+    haptic();
+    if (WebRTCModule.isMicActive()) {
+      await WebRTCModule.stop();
+      micEnabled = false;
+      els.btnMic.classList.remove('btn-active', 'rtc-connected');
+    } else {
+      micEnabled = true;
+      els.btnMic.classList.add('btn-active');
+      await WebRTCModule.start({ camera: cameraEnabled, mic: true });
     }
   }
 

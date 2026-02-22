@@ -57,6 +57,8 @@
       <div class="action-row">
         <button id="btn-fullscreen-touch" class="btn btn-small">Touch Pad</button>
         <button id="btn-enable-sensors" class="btn btn-small">Enable Sensors</button>
+        <button id="btn-camera" class="btn btn-small">Camera</button>
+        <button id="btn-mic" class="btn btn-small">Mic</button>
       </div>
       <pre id="debug-info" class="log-panel hidden"></pre>
     </div>
@@ -91,10 +93,14 @@
   <!-- Loading screen: shown while waiting for config on first QR-scan connection -->
   <div id="wob-loading" class="hidden"></div>
 
+  <!-- Local camera preview (picture-in-picture, hidden when camera inactive) -->
+  <video id="webrtc-preview" class="webrtc-preview hidden" autoplay muted playsinline></video>
+
   <script src="js/websocket.js"></script>
   <script src="js/sensors.js"></script>
   <script src="js/touch.js"></script>
   <script src="js/visualization.js"></script>
+  <script src="js/webrtc.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
