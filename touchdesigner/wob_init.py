@@ -64,7 +64,7 @@ def generate():
 		from pycloudflared import try_cloudflare
 		print('[WOB] Starting Cloudflare tunnel... (no signup required)')
 		result = try_cloudflare(port=9980)
-		url = result.url  # e.g. "https://xxxx.trycloudflare.com"
+		url = result.tunnel  # e.g. "https://xxxx.trycloudflare.com"
 		print(f'[WOB] Cloudflare URL: {url}')
 	except ImportError:
 		print('[WOB] pycloudflared not installed. Run op("wob_setup").module.install() first.')
