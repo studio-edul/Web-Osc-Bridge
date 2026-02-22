@@ -497,6 +497,12 @@ input[type="checkbox"] {
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.broadcast-buttons {
+  display: flex;
   gap: 8px;
   align-items: stretch;
 }
@@ -504,7 +510,6 @@ input[type="checkbox"] {
 .broadcast-status {
   font-size: 12px;
   padding: 8px 10px;
-  margin-bottom: 8px;
   border-radius: 6px;
   background: var(--surface2);
   color: var(--text-dim);
