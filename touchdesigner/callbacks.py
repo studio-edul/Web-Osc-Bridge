@@ -1,8 +1,9 @@
-import json
+﻿import json
 
 GITHUB_PAGES_URL = 'https://studio-edul.github.io/Web-Osc-Bridge/'
 # Default - overridden by config_table DAT at init_tables() time
 MAX_CLIENTS = 20
+
 
 SENSOR_COLS = [
 	'slot', 'connected',
@@ -37,6 +38,16 @@ def _save_free(lst):
 
 def _save_touch(d):
 	op('/').store('wob_touch_count', d)
+
+def _find_row(t, slot):
+	"""Return the row index in sensor_table whose 'slot' column matches slot, or None."""
+	for r in range(1, t.numRows):
+		try:
+			if int(t[r, 'slot']) == slot:
+				return r
+		except Exception:
+			pass
+	return None
 
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -74,10 +85,7 @@ def init_tables():
 	if t is not None:
 		t.clear()
 		t.appendRow(SENSOR_COLS)
-		for i in range(1, MAX_CLIENTS + 1):
-			row = [i, 0] + [0.0] * (len(SENSOR_COLS) - 2)
-			t.appendRow(row)
-		print(f'[WOB] sensor_table initialized ({MAX_CLIENTS} slots)')
+		print(f'[WOB] sensor_table initialized (dynamic rows, max {MAX_CLIENTS} slots)')
 	else:
 		print('[WOB] sensor_table DAT not found - create a Table DAT named "sensor_table"')
 
@@ -90,14 +98,9 @@ def init_tables():
 		print('[WOB] touch_table DAT not found - create a Table DAT named "touch_table"')
 
 
-def broadcast_config(webServerDAT):
-	"""Push updated config to all connected clients.
-	Call from TD script after editing wob_config:
-	    op('web_server_dat').module.broadcast_config(op('web_server_dat'))
-	wob_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode
-	"""
-	cfg = _read_config()
-	msg = json.dumps({
+def _config_msg(cfg):
+	"""Build config JSON dict from wob_config values."""
+	return {
 		'type':               'config',
 		'sample_rate':        int(cfg.get('sample_rate', 30)),
 		'wake_lock':          int(cfg.get('wake_lock', 1)),
@@ -107,7 +110,19 @@ def broadcast_config(webServerDAT):
 		'sensor_geolocation': int(cfg.get('sensor_geolocation', 0)),
 		'sensor_touch':       int(cfg.get('sensor_touch', 1)),
 		'dev_mode':           int(cfg.get('dev_mode', 1)),
-	})
+		'camera':             int(cfg.get('camera', 0)),
+		'microphone':         int(cfg.get('microphone', 0)),
+	}
+
+
+def broadcast_config(webServerDAT):
+	"""Push updated config to all connected clients.
+	Call from TD script after editing wob_config:
+	    op('web_server_dat').module.broadcast_config(op('web_server_dat'))
+	wob_config keys: sample_rate, wake_lock, haptic, sensors, dev_mode, camera, microphone
+	"""
+	cfg = _read_config()
+	msg = json.dumps(_config_msg(cfg))
 	for addr in list(_slots().keys()):
 		try:
 			webServerDAT.webSocketSendText(addr, msg)
@@ -155,6 +170,9 @@ def onHTTPRequest(webServerDAT, request, response):
 
 def onWebSocketOpen(webServerDAT, client):
 	try:
+		# Store web server DAT path so webrtc_callbacks.py can find it
+		op('/').store('wob_webserver_op', webServerDAT.path)
+
 		addr = str(client)
 		free = _free()
 
@@ -174,24 +192,14 @@ def onWebSocketOpen(webServerDAT, client):
 
 		t = op('sensor_table')
 		if t is not None:
-			t[slot, 'connected'] = 1
+			t.appendRow([slot, 1] + [0.0] * (len(SENSOR_COLS) - 2))
 
 		print(f'[WOB] Connected -> slot {slot} | {addr} | {MAX_CLIENTS - len(free)} active')
 		webServerDAT.webSocketSendText(client, json.dumps({'type': 'ack', 'slot': slot}))
 
 		# Push current config to the newly connected client
 		cfg = _read_config()
-		webServerDAT.webSocketSendText(client, json.dumps({
-			'type':               'config',
-			'sample_rate':        int(cfg.get('sample_rate', 30)),
-			'wake_lock':          int(cfg.get('wake_lock', 1)),
-			'haptic':             int(cfg.get('haptic', 1)),
-			'sensor_motion':      int(cfg.get('sensor_motion', 1)),
-			'sensor_orientation': int(cfg.get('sensor_orientation', 1)),
-			'sensor_geolocation': int(cfg.get('sensor_geolocation', 0)),
-			'sensor_touch':       int(cfg.get('sensor_touch', 1)),
-			'dev_mode':           int(cfg.get('dev_mode', 1)),
-		}))
+		webServerDAT.webSocketSendText(client, json.dumps(_config_msg(cfg)))
 	except Exception as e:
 		print(f'[WOB] ERROR in onWebSocketOpen: {e}')
 
@@ -216,7 +224,9 @@ def onWebSocketClose(webServerDAT, client):
 
 	t = op('sensor_table')
 	if t is not None:
-		t.replaceRow(slot, [slot, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+		row = _find_row(t, slot)
+		if row is not None:
+			t.deleteRow(row)
 
 	tt = op('touch_table')
 	if tt is not None:
@@ -226,6 +236,9 @@ def onWebSocketClose(webServerDAT, client):
 		]
 		for r in reversed(rows_to_delete):
 			tt.deleteRow(r)
+
+	# Clean up WebRTC state for this slot
+	op('/').store(f'wob_webrtc_addr_{slot}', None)
 
 	print(f'[WOB] Disconnected -> slot {slot} | {addr} | {MAX_CLIENTS - len(free)} active')
 
@@ -244,8 +257,8 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		_save_slots(slots)
 		_save_free(free)
 		t2 = op('sensor_table')
-		if t2 is not None:
-			t2[slot, 'connected'] = 1
+		if t2 is not None and _find_row(t2, slot) is None:
+			t2.appendRow([slot, 1] + [0.0] * (len(SENSOR_COLS) - 2))
 		print(f'[WOB] Recovered slot {slot} for {addr}')
 
 	try:
@@ -259,13 +272,16 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 		t = op('sensor_table')
 		if t is None:
 			return
+		row = _find_row(t, slot)
+		if row is None:
+			return
 		g = msg.get
 		# Consume pending trig pulse (1 for one packet, then resets to 0)
 		trig_key = f'wob_trig_{slot}'
 		trig = op('/').fetch(trig_key, 0)
 		if trig:
 			op('/').store(trig_key, 0)
-		t.replaceRow(slot, [
+		t.replaceRow(row, [
 			slot, 1,
 			g('ax', 0), g('ay', 0), g('az', 0),
 			g('ga', 0), g('gb', 0), g('gg', 0),
@@ -283,7 +299,9 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 
 		t = op('sensor_table')
 		if t is not None:
-			t[slot, 'touch_count'] = count
+			row = _find_row(t, slot)
+			if row is not None:
+				t[row, 'touch_count'] = count
 
 		tt = op('touch_table')
 		if tt is not None:
@@ -302,3 +320,35 @@ def onWebSocketReceiveText(webServerDAT, client, data):
 
 	elif msg_type == 'hello':
 		print(f'[WOB] Hello from slot {slot} - OK')
+
+	elif msg_type == 'webrtc_offer':
+		sdp = msg.get('sdp')
+		if not sdp:
+			return
+		wrtc = op('webrtc_dat')
+		if wrtc is None:
+			print('[WOB] webrtc_dat not found — create a WebRTC DAT named "webrtc_dat"')
+			return
+		conn_id = str(slot)
+		op('/').store(f'wob_webrtc_addr_{conn_id}', addr)
+		try:
+			wrtc.setRemoteDescription(conn_id, 'offer', sdp)
+			wrtc.createAnswer(conn_id)
+			print(f'[WOB WebRTC] Offer received from slot {slot}, creating answer...')
+		except Exception as e:
+			print(f'[WOB WebRTC] Offer handling error: {e}')
+
+	elif msg_type == 'webrtc_ice':
+		candidate = msg.get('candidate')
+		if not candidate:
+			return
+		wrtc = op('webrtc_dat')
+		if wrtc is None:
+			return
+		conn_id = str(slot)
+		line_index = int(msg.get('sdpMLineIndex', 0))
+		sdp_mid = msg.get('sdpMid', '')
+		try:
+			wrtc.addIceCandidate(conn_id, candidate, line_index, sdp_mid)
+		except Exception as e:
+			print(f'[WOB WebRTC] addIceCandidate error: {e}')

@@ -577,6 +577,35 @@ input[type="checkbox"] {
   background: var(--bg);
 }
 
+/* ===== WebRTC Camera/Mic buttons ===== */
+#btn-camera.btn-active,
+#btn-mic.btn-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+#btn-camera.rtc-connected,
+#btn-mic.rtc-connected {
+  background: var(--success);
+  color: #000;
+  border-color: var(--success);
+}
+
+/* Local camera preview — picture-in-picture */
+.webrtc-preview {
+  position: fixed;
+  bottom: 80px;
+  right: 12px;
+  width: 100px;
+  height: 75px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--primary);
+  z-index: 490;
+  background: #000;
+}
+
 /* ===== Scrollbar ===== */
 ::-webkit-scrollbar {
   width: 4px;

@@ -14,6 +14,7 @@ const WSClient = (() => {
   let onStatusChange = null;
   let onErrorDetail = null;
   let onConfig = null;
+  let onWebRTCSignal = null; // callback(msg) for webrtc_answer / webrtc_ice / webrtc_state
 
   // Packet counting
   let sentCount = 0;
@@ -27,6 +28,7 @@ const WSClient = (() => {
     onStatusChange = callbacks.onStatusChange || null;
     onErrorDetail = callbacks.onErrorDetail || null;
     onConfig = callbacks.onConfig || null;
+    onWebRTCSignal = callbacks.onWebRTCSignal || null;
     reconnectAttempts = 0; // reset in case previous session was rejected
 
     // Strip any existing protocol prefix, then re-add the correct one
@@ -71,6 +73,8 @@ const WSClient = (() => {
           console.log('[WS] TD ack, slot:', msg.slot);
         } else if (msg.type === 'config') {
           if (onConfig) onConfig(msg);
+        } else if (msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice' || msg.type === 'webrtc_state') {
+          if (onWebRTCSignal) onWebRTCSignal(msg);
         } else if (msg.type === 'rejected') {
           // Server full — cancel reconnect and surface the reason
           if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
